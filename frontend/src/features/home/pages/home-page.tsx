@@ -1,23 +1,32 @@
+import { useSearchParams } from "react-router-dom"
+
+import { AppHeader } from "@/components/layout/app-header"
+import { BottomNav } from "@/components/layout/bottom-nav"
+import { HomeProgressHero } from "@/features/home/components/home-progress-hero"
+import { PriorityPropertiesCard } from "@/features/home/components/priority-properties-card"
+import { SettlementChecklistCard } from "@/features/home/components/settlement-checklist-card"
+import { SettlementProfileCard } from "@/features/home/components/settlement-profile-card"
+import { homeStageContents, isHomeStage } from "@/features/home/home-data"
+
 function HomePage() {
+  const [searchParams] = useSearchParams()
+  const requestedStage = searchParams.get("stage")
+  const stage = isHomeStage(requestedStage) ? requestedStage : "1"
+  const completed = stage === "done"
+  const showProfile = stage !== "1"
+
   return (
-    <main className="flex min-h-dvh flex-col bg-[#f6f7f8]">
-      <header className="bg-white px-5 pb-5 pt-[max(24px,env(safe-area-inset-top))]">
-        <span className="text-xl font-extrabold tracking-[-0.04em]">타지살이</span>
-      </header>
-      <section className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-        <div
-          className="grid size-16 place-items-center rounded-full bg-[var(--brand-soft)] text-3xl"
-          aria-hidden="true"
-        >
-          🏠
-        </div>
-        <h1 className="mt-5 text-2xl font-bold tracking-[-0.04em]">
-          홈 화면을 준비하고 있어요
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-          시작 화면의 이동을 확인하기 위한 임시 화면입니다.
-        </p>
-      </section>
+    <main className="flex min-h-dvh flex-col bg-[#f5f6f7]">
+      <AppHeader />
+      <HomeProgressHero content={homeStageContents[stage]} completed={completed} />
+
+      <div className="space-y-4 px-4 pt-5 pb-[calc(120px+env(safe-area-inset-bottom))]">
+        {showProfile && <SettlementProfileCard />}
+        {completed && <PriorityPropertiesCard />}
+        <SettlementChecklistCard completed={completed} />
+      </div>
+
+      <BottomNav />
     </main>
   )
 }
