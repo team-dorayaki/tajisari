@@ -1,14 +1,17 @@
 import argparse
 import base64
 import json
+import logging
 import mimetypes
 import os
-import sys
 import time
 from pathlib import Path
 from urllib.parse import urlparse
 
 from google import genai
+
+
+logger = logging.getLogger(__name__)
 
 
 REQUIRED_SECTIONS = {
@@ -452,10 +455,7 @@ def analyze_webpage(url: str, prompt: str, model: str) -> str:
         f"{url_prompt}\nURL Context 도구로 다음 공개 웹페이지를 직접 읽고 "
         f"해당 페이지에서 확인한 내용만 분석하세요.\n분석 대상 URL: {url}"
     )
-    print(
-        f"[전송] URL Context 요청, 프롬프트 {len(request_text):,}자",
-        file=sys.stderr,
-    )
+    logger.info("URL Context 요청 prompt_chars=%d model=%s", len(request_text), model)
     client = genai.Client(api_key=api_key)
     api_started = time.perf_counter()
     interaction = client.interactions.create(
@@ -465,15 +465,15 @@ def analyze_webpage(url: str, prompt: str, model: str) -> str:
         generation_config={"thinking_level": "low"},
         response_format={"type": "text", "mime_type": "application/json", "schema": OUTPUT_SCHEMA},
     )
-    print(
-        f"[시간] URL Context + Gemini API 응답: "
-        f"{time.perf_counter() - api_started:.2f}초",
-        file=sys.stderr,
+    logger.info(
+        "URL Context + Gemini API 응답 duration=%.2fs",
+        time.perf_counter() - api_started,
     )
+    log_token_usage(interaction, context="url")
     try:
         print_url_context_status(interaction, requested_url=url)
     except Exception as log_error:
-        print(f"[URL Context] 로그 해석 실패: {log_error}", file=sys.stderr)
+        logger.warning("URL Context 로그 해석 실패: %s", log_error)
     if not interaction.output_text:
         raise RuntimeError("Gemini 응답에 분석 결과가 없습니다.")
     result = validate_analysis_json(
@@ -481,7 +481,7 @@ def analyze_webpage(url: str, prompt: str, model: str) -> str:
         provider="Gemini",
         debug_info=f"status={getattr(interaction, 'status', None)}",
     )
-    print(f"[시간] 전체 처리: {time.perf_counter() - total_started:.2f}초", file=sys.stderr)
+    logger.info("URL 분석 전체 처리 duration=%.2fs", time.perf_counter() - total_started)
     return result
 
 
@@ -491,10 +491,10 @@ def print_url_context_status(interaction, requested_url: str) -> None:
     context_steps = [
         step for step in steps if getattr(step, "type", None) == "url_context_result"
     ]
-    print(
-        f"[URL Context] tool_called={str(bool(context_steps)).lower()}, "
-        f"requested_url={requested_url}",
-        file=sys.stderr,
+    logger.info(
+        "URL Context tool_called=%s requested_url=%s",
+        str(bool(context_steps)).lower(),
+        requested_url,
     )
 
     status_values = []
@@ -506,21 +506,19 @@ def print_url_context_status(interaction, requested_url: str) -> None:
         collect_url_context_values(payload, status_values, retrieved_urls)
 
     if context_steps:
-        print(
-            f"[URL Context] status={', '.join(dict.fromkeys(status_values)) or 'unknown'}",
-            file=sys.stderr,
+        logger.info(
+            "URL Context status=%s",
+            ", ".join(dict.fromkeys(status_values)) or "unknown",
         )
         if retrieved_urls:
-            print(
-                "[URL Context] retrieved_url="
-                + ", ".join(dict.fromkeys(retrieved_urls)),
-                file=sys.stderr,
+            logger.info(
+                "URL Context retrieved_url=%s",
+                ", ".join(dict.fromkeys(retrieved_urls)),
             )
         if not status_values or not retrieved_urls:
-            print(
-                "[URL Context 상세] "
-                + json.dumps(serialized_steps, ensure_ascii=False),
-                file=sys.stderr,
+            logger.debug(
+                "URL Context 상세=%s",
+                json.dumps(serialized_steps, ensure_ascii=False),
             )
 
     citation_urls = []
@@ -533,18 +531,46 @@ def print_url_context_status(interaction, requested_url: str) -> None:
                     citation_url = getattr(annotation, "url", None)
                     if citation_url:
                         citation_urls.append(str(citation_url))
-    print(f"[URL Context] citation_count={len(citation_urls)}", file=sys.stderr)
+    logger.info("URL Context citation_count=%d", len(citation_urls))
     for citation_url in dict.fromkeys(citation_urls):
-        print(f"[URL Context] citation_url={citation_url}", file=sys.stderr)
+        logger.info("URL Context citation_url=%s", citation_url)
 
     usage = getattr(interaction, "usage", None)
     usage_payload = safe_model_dump(usage)
     tool_tokens = find_numeric_value(usage_payload, "tool_use_input_tokens")
     total_tokens = find_numeric_value(usage_payload, "total_tokens")
-    print(
-        f"[URL Context] tool_use_input_tokens={tool_tokens if tool_tokens is not None else 'unknown'}, "
-        f"total_tokens={total_tokens if total_tokens is not None else 'unknown'}",
-        file=sys.stderr,
+    logger.info(
+        "URL Context tool_use_input_tokens=%s total_tokens=%s",
+        tool_tokens if tool_tokens is not None else "unknown",
+        total_tokens if total_tokens is not None else "unknown",
+    )
+
+
+def log_token_usage(interaction, context: str) -> None:
+    """SDK 버전에 상관없이 확인 가능한 토큰 및 캐시 사용량을 기록한다."""
+    usage_payload = safe_model_dump(getattr(interaction, "usage", None))
+    input_tokens = find_numeric_value(usage_payload, "input_tokens")
+    cached_tokens = find_numeric_value(usage_payload, "total_cached_tokens")
+    output_tokens = find_numeric_value(usage_payload, "output_tokens")
+    thoughts_tokens = find_numeric_value(usage_payload, "thoughts_tokens")
+    tool_tokens = find_numeric_value(usage_payload, "tool_use_input_tokens")
+    total_tokens = find_numeric_value(usage_payload, "total_tokens")
+
+    cache_hit_rate = None
+    if input_tokens and cached_tokens is not None:
+        cache_hit_rate = cached_tokens / input_tokens * 100
+
+    logger.info(
+        "Gemini 토큰 context=%s input=%s cached=%s output=%s thoughts=%s "
+        "tool_input=%s total=%s cache_hit_rate=%s",
+        context,
+        input_tokens if input_tokens is not None else "unknown",
+        cached_tokens if cached_tokens is not None else "unknown",
+        output_tokens if output_tokens is not None else "unknown",
+        thoughts_tokens if thoughts_tokens is not None else "unknown",
+        tool_tokens if tool_tokens is not None else "unknown",
+        total_tokens if total_tokens is not None else "unknown",
+        f"{cache_hit_rate:.1f}%" if cache_hit_rate is not None else "unknown",
     )
 
 
@@ -623,7 +649,11 @@ def analyze_images(image_paths: list[Path], prompt: str, model: str) -> str:
     interaction_input = [{"type": "text", "text": request_prompt}]
     interaction_input.extend(encode_image(image_path) for image_path in resolved_paths)
     preprocess_seconds = time.perf_counter() - preprocess_started
-    print(f"[시간] 이미지 전처리: {preprocess_seconds:.2f}초", file=sys.stderr)
+    logger.info(
+        "이미지 전처리 image_count=%d duration=%.2fs",
+        len(resolved_paths),
+        preprocess_seconds,
+    )
 
     api_started = time.perf_counter()
     interaction = client.interactions.create(
@@ -637,7 +667,8 @@ def analyze_images(image_paths: list[Path], prompt: str, model: str) -> str:
         },
     )
     api_seconds = time.perf_counter() - api_started
-    print(f"[시간] Gemini API 응답: {api_seconds:.2f}초", file=sys.stderr)
+    logger.info("Gemini 이미지 API 응답 duration=%.2fs", api_seconds)
+    log_token_usage(interaction, context="images")
 
     if not interaction.output_text:
         raise RuntimeError(
@@ -657,8 +688,8 @@ def analyze_images(image_paths: list[Path], prompt: str, model: str) -> str:
     )
     validation_seconds = time.perf_counter() - validation_started
     total_seconds = time.perf_counter() - total_started
-    print(f"[시간] JSON 검증: {validation_seconds:.2f}초", file=sys.stderr)
-    print(f"[시간] 전체 처리: {total_seconds:.2f}초", file=sys.stderr)
+    logger.info("Gemini JSON 검증 duration=%.2fs", validation_seconds)
+    logger.info("이미지 분석 전체 처리 duration=%.2fs", total_seconds)
     return result
 
 
@@ -791,11 +822,15 @@ def validate_analysis_json(result: str, provider: str, debug_info: str) -> str:
 
 
 def main() -> int:
+    # 이전 CLI 실행 방식에서도 FastAPI와 같은 로그 설정을 사용한다.
+    from app.core.logging_config import configure_logging
+
+    configure_logging()
     args = parse_args()
 
     try:
         if len(args.images) == 1 and is_web_url(args.images[0]):
-            print(f"웹페이지 분석 중: {args.images[0]}", file=sys.stderr)
+            logger.info("웹페이지 분석 시작 url=%s", args.images[0])
             result = analyze_webpage(args.images[0], args.prompt, args.model)
         elif any(is_web_url(value) for value in args.images):
             raise ValueError("웹페이지 URL은 하나만 입력하고 이미지 경로와 섞지 마세요.")
@@ -804,7 +839,7 @@ def main() -> int:
                 [Path(value) for value in args.images], args.prompt, args.model
             )
     except Exception as error:
-        print(f"오류: {error}", file=sys.stderr)
+        logger.exception("Gemini 분석 실패: %s", error)
         return 1
 
     print("\n===== Gemini 이미지 분석 결과 =====")

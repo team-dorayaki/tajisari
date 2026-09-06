@@ -10,6 +10,7 @@ def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    assert response.headers["X-Request-ID"]
 
 
 def test_image_upload_openapi_uses_binary_files() -> None:

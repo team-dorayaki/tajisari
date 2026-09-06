@@ -100,6 +100,18 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - Swagger UI: http://127.0.0.1:8000/docs
 - 상태 확인: http://127.0.0.1:8000/health
 
+## 로그
+
+서버 로그는 터미널과 `ai/logs` 폴더에 함께 기록됩니다.
+
+- `logs/app.log`: Gemini 처리 시간, URL Context 상태, 토큰 및 캐시 사용량
+- `logs/access.log`: 요청 ID, HTTP 경로, 상태 코드 및 처리 시간
+- `logs/error.log`: 처리 중 발생한 오류와 스택 추적
+
+로그 파일은 파일당 최대 10MB이며 이전 로그를 최대 5개까지 보관합니다. API 키, 이미지 Base64 데이터와 전체 분석 결과는 기록하지 않습니다. 로그 파일은 Git에서 제외되고 `logs/.gitkeep`만 저장소에 포함됩니다.
+
+각 HTTP 응답의 `X-Request-ID` 헤더를 이용하면 같은 요청에서 발생한 로그를 찾을 수 있습니다.
+
 ## 이미지 분석
 
 `POST /api/v1/analysis/images`에 `multipart/form-data`로 `files`를 여러 번 전달합니다.
