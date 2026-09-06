@@ -58,6 +58,34 @@ def classify_gemini_error(error: Exception, input_type: str) -> AppError:
     lowered = message.lower()
     status = _status_code(error)
 
+    if "gemini_response_truncated" in lowered:
+        return AppError(
+            "GEMINI_RESPONSE_TRUNCATED",
+            "Gemini 응답이 출력 한도에 도달해 완성되지 않았습니다. 다시 시도해 주세요.",
+            502,
+            True,
+        )
+    if "url_context_paywall" in lowered:
+        return AppError(
+            "URL_CONTEXT_PAYWALL",
+            "유료 구독이 필요한 웹페이지는 분석할 수 없습니다.",
+            403,
+            False,
+        )
+    if "url_context_unsafe" in lowered:
+        return AppError(
+            "URL_CONTEXT_UNSAFE",
+            "안전 정책으로 인해 해당 웹페이지에 접근할 수 없습니다.",
+            403,
+            False,
+        )
+    if "url_context_failed" in lowered:
+        return AppError(
+            "URL_CONTEXT_FAILED",
+            "웹페이지 내용을 가져오지 못했습니다. 공개 URL인지 확인해 주세요.",
+            502,
+            True,
+        )
     if "gemini_api_key" in lowered and "환경 변수" in message:
         return AppError(
             "API_KEY_MISSING",

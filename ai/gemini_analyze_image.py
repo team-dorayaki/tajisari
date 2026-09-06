@@ -465,6 +465,8 @@ def analyze_webpage(url: str, prompt: str, model: str) -> str:
         generation_config={"thinking_level": "low"},
         response_format={"type": "text", "mime_type": "application/json", "schema": OUTPUT_SCHEMA},
     )
+    validate_interaction_status(interaction)
+    validate_url_context_result(interaction)
     logger.info(
         "URL Context + Gemini API 응답 duration=%.2fs",
         time.perf_counter() - api_started,
@@ -544,6 +546,53 @@ def print_url_context_status(interaction, requested_url: str) -> None:
         tool_tokens if tool_tokens is not None else "unknown",
         total_tokens if total_tokens is not None else "unknown",
     )
+
+
+def normalized_status(value) -> str:
+    return str(getattr(value, "value", value) or "").lower()
+
+
+def validate_interaction_status(interaction) -> None:
+    """Interactions API가 명시한 종료 상태로 잘림과 실행 실패를 판정한다."""
+    status = normalized_status(getattr(interaction, "status", ""))
+    if status in {"incomplete", "budget_exceeded"}:
+        raise RuntimeError(f"GEMINI_RESPONSE_TRUNCATED: interaction_status={status}")
+    if status in {"failed", "cancelled"}:
+        errors = safe_model_dump(getattr(interaction, "errors", None))
+        raise RuntimeError(
+            "GEMINI_INTERACTION_FAILED: "
+            f"interaction_status={status}, errors={json.dumps(errors, ensure_ascii=False)}"
+        )
+
+
+def validate_url_context_result(interaction) -> None:
+    """SDK가 제공하는 URL Context 상태만 사용해 접근 결과를 검증한다."""
+    context_steps = [
+        step
+        for step in (getattr(interaction, "steps", None) or [])
+        if getattr(step, "type", None) == "url_context_result"
+    ]
+    if not context_steps:
+        raise RuntimeError("URL_CONTEXT_FAILED: URL Context 결과 단계가 없습니다.")
+
+    statuses: set[str] = set()
+    has_step_error = False
+    for step in context_steps:
+        has_step_error = has_step_error or bool(getattr(step, "is_error", False))
+        for result in getattr(step, "result", None) or []:
+            status = getattr(result, "status", None)
+            if status:
+                statuses.add(normalized_status(status))
+
+    if "paywall" in statuses:
+        raise RuntimeError("URL_CONTEXT_PAYWALL: 유료 구독이 필요한 페이지입니다.")
+    if "unsafe" in statuses:
+        raise RuntimeError("URL_CONTEXT_UNSAFE: 안전 정책으로 URL 접근이 차단됐습니다.")
+    if has_step_error or "error" in statuses or "success" not in statuses:
+        raise RuntimeError(
+            "URL_CONTEXT_FAILED: URL을 가져오지 못했습니다. "
+            f"statuses={sorted(statuses) or ['unknown']}"
+        )
 
 
 def log_token_usage(interaction, context: str) -> None:
@@ -666,6 +715,7 @@ def analyze_images(image_paths: list[Path], prompt: str, model: str) -> str:
             "schema": OUTPUT_SCHEMA,
         },
     )
+    validate_interaction_status(interaction)
     api_seconds = time.perf_counter() - api_started
     logger.info("Gemini 이미지 API 응답 duration=%.2fs", api_seconds)
     log_token_usage(interaction, context="images")

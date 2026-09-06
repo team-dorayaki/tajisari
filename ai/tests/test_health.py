@@ -1,7 +1,12 @@
+from types import SimpleNamespace
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
+from app.core.errors import classify_gemini_error
 from app.main import app
+from gemini_analyze_image import validate_interaction_status, validate_url_context_result
 
 
 client = TestClient(app)
@@ -70,3 +75,37 @@ def test_too_many_images_returns_standard_error() -> None:
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "TOO_MANY_IMAGES"
     assert response.json()["error"]["retryable"] is False
+
+
+@pytest.mark.parametrize("status", ["incomplete", "budget_exceeded"])
+def test_incomplete_interaction_is_detected_as_truncated(status: str) -> None:
+    with pytest.raises(RuntimeError, match="GEMINI_RESPONSE_TRUNCATED"):
+        validate_interaction_status(SimpleNamespace(status=status))
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_marker", "expected_code"),
+    [
+        ("error", "URL_CONTEXT_FAILED", "URL_CONTEXT_FAILED"),
+        ("paywall", "URL_CONTEXT_PAYWALL", "URL_CONTEXT_PAYWALL"),
+        ("unsafe", "URL_CONTEXT_UNSAFE", "URL_CONTEXT_UNSAFE"),
+    ],
+)
+def test_url_context_failure_statuses_are_classified(
+    status: str, expected_marker: str, expected_code: str
+) -> None:
+    interaction = SimpleNamespace(
+        steps=[
+            SimpleNamespace(
+                type="url_context_result",
+                is_error=status == "error",
+                result=[SimpleNamespace(status=status)],
+            )
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match=expected_marker) as caught:
+        validate_url_context_result(interaction)
+
+    app_error = classify_gemini_error(caught.value, "url")
+    assert app_error.code == expected_code
