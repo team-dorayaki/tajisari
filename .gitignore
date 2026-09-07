@@ -1,0 +1,37 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+__MACOSX/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Logs
+*.log
+logs/
+!ai/logs/
+ai/logs/*
+!ai/logs/.gitkeep
+
+# Temporary files
+tmp/
+temp/
+
+# Python / AI
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
