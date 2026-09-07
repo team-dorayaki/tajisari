@@ -140,13 +140,69 @@ Invoke-RestMethod `
 
 ## 응답 형식
 
+분석 결과는 고정 필드, 가변 비용, 추가 정보와 검증 결과로 구분합니다. `管理費`와 `共益費`는 현재 `management_fee` 하나로 합치고 원문은 `raw_value`에 보존합니다. 아래 JSON은 구조를 설명하기 위해 일부 고정 필드를 생략한 예시입니다.
+
 ```json
 {
   "input_type": "images",
   "model": "gemini-3.5-flash-lite",
-  "result": {}
+  "result": {
+    "analysis_metadata": {
+      "schema_version": "2.0",
+      "source_type": "IMAGE",
+      "source_site": "SUUMO",
+      "source_url": null,
+      "image_count": 2
+    },
+    "property": {
+      "rent": {
+        "value": 65000,
+        "raw_value": "65,000円",
+        "confidence": 0.99,
+        "needs_review": false,
+        "evidence": [
+          {
+            "source_type": "IMAGE",
+            "source_index": 1,
+            "source_url": null,
+            "raw_text": "65,000円"
+          }
+        ]
+      },
+      "management_fee": {
+        "value": 5000,
+        "raw_value": "管理費 5,000円",
+        "confidence": 0.98,
+        "needs_review": false,
+        "evidence": [
+          {
+            "source_type": "IMAGE",
+            "source_index": 1,
+            "source_url": null,
+            "raw_text": "管理費 5,000円"
+          }
+        ]
+      }
+    },
+    "cost_items": [],
+    "additional_fields": [],
+    "validation": {
+      "conflicts": [],
+      "warnings": [],
+      "unknown_fields": [],
+      "checks": {
+        "evidence_only": true,
+        "amount_does_not_imply_required": true,
+        "zero_and_null_distinguished": true,
+        "duplicates_removed": true,
+        "conflicts_reviewed": true
+      }
+    }
+  }
 }
 ```
+
+`value`가 `null`이면 미기재 또는 미확인이고, 원문에 `なし`, `不要`, `0円`이 명시된 경우에만 `0`으로 기록합니다. 신뢰도가 0.7 미만이거나 근거가 없거나 충돌이 해결되지 않으면 `needs_review`가 `true`가 됩니다.
 
 오류 응답은 프론트엔드에서 구분할 수 있도록 공통 형식으로 반환합니다.
 

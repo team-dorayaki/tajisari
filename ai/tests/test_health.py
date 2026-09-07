@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.core.config import settings
 from app.core.errors import classify_gemini_error
 from app.main import app
+from app.schemas.analysis_output import OUTPUT_SCHEMA
 from gemini_analyze_image import validate_interaction_status, validate_url_context_result
 
 
@@ -109,3 +110,37 @@ def test_url_context_failure_statuses_are_classified(
 
     app_error = classify_gemini_error(caught.value, "url")
     assert app_error.code == expected_code
+
+
+def test_analysis_output_schema_v2_uses_fixed_and_variable_fields() -> None:
+    properties = OUTPUT_SCHEMA["properties"]
+    fixed_fields = properties["property"]["properties"]
+
+    assert set(properties) == {
+        "analysis_metadata",
+        "property",
+        "cost_items",
+        "additional_fields",
+        "validation",
+    }
+    assert properties["analysis_metadata"]["properties"]["schema_version"]["enum"] == [
+        "2.0"
+    ]
+    assert "management_fee" in fixed_fields
+    assert "common_service_fee" not in fixed_fields
+    assert "cost_items" in properties
+    assert "additional_fields" in properties
+
+
+def test_management_fee_keeps_evidence_and_review_fields() -> None:
+    management_fee = OUTPUT_SCHEMA["properties"]["property"]["properties"][
+        "management_fee"
+    ]["properties"]
+
+    assert set(management_fee) == {
+        "value",
+        "raw_value",
+        "confidence",
+        "needs_review",
+        "evidence",
+    }
