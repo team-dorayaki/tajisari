@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 const navItems = [
   { label: "홈", href: "/home", icon: House },
   { label: "매물", href: "/properties", icon: Building2 },
-  { label: "MY", href: "/my", icon: UserRound },
+  { label: "마이", href: "/my", icon: UserRound },
 ]
 
 function BottomNav() {

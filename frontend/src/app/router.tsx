@@ -16,6 +16,8 @@ import {
   UrlRegistrationPage,
 } from "@/features/properties/pages/property-registration-page"
 import { SettlementPlanPage } from "@/features/settlement-plan/pages/settlement-plan-page"
+import { MySettlementPlanPage } from "@/features/settlement-plan/pages/my-settlement-plan-page"
+import { ExchangeRateEditPage } from "@/features/settlement-plan/pages/exchange-rate-edit-page"
 
 const router = createBrowserRouter([
   {
@@ -25,6 +27,7 @@ const router = createBrowserRouter([
       { path: "start", element: <StartPage /> },
       { path: "home", element: <HomePage /> },
       { path: "plan", element: <SettlementPlanPage /> },
+      { path: "plan/exchange-rate", element: <ExchangeRateEditPage /> },
       { path: "plan/:step", element: <SettlementPlanPage /> },
       { path: "properties", element: <PropertiesPage /> },
       { path: "properties/new", element: <PropertyRegistrationPage /> },
@@ -35,7 +38,7 @@ const router = createBrowserRouter([
       { path: "properties/costs/review", element: <RequiredCostsPage /> },
       { path: "properties/:propertyId", element: <PropertyDetailPage /> },
       { path: "properties/compare", element: <PropertyComparisonPage /> },
-      { path: "my", element: <ComingSoonPage /> },
+      { path: "my", element: <MySettlementPlanPage /> },
       { path: "checklist", element: <ComingSoonPage /> },
     ],
   },

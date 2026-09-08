@@ -6,7 +6,7 @@ type HomeStageContent = {
   description: string
   action?: string
   actionHref?: string
-  illustration: string
+  illustration: number
   progress?: number
 }
 
@@ -17,7 +17,7 @@ const homeStageContents: Record<HomeStage, HomeStageContent> = {
     description: "먼저 내 계획을 등록하기",
     action: "계획 등록하기",
     actionHref: "/plan",
-    illustration: "🏠",
+    illustration: 0,
     progress: 5,
   },
   "2": {
@@ -26,7 +26,7 @@ const homeStageContents: Record<HomeStage, HomeStageContent> = {
     description: "이미지로 한 번에 숨은 비용 찾기",
     action: "매물 등록하기",
     actionHref: "/properties/new",
-    illustration: "📝",
+    illustration: 1,
     progress: 28,
   },
   "3": {
@@ -35,7 +35,7 @@ const homeStageContents: Record<HomeStage, HomeStageContent> = {
     description: "같은 계획과 환율로 한눈에 비교하기",
     action: "매물 비교하기",
     actionHref: "/properties/compare",
-    illustration: "🏘️",
+    illustration: 2,
     progress: 52,
   },
   "4": {
@@ -44,14 +44,14 @@ const homeStageContents: Record<HomeStage, HomeStageContent> = {
     description: "비용과 조건을 확인하고 우선순위 정하기",
     action: "최종 매물 선정하기",
     actionHref: "/properties/compare?tab=conditions",
-    illustration: "🏡",
+    illustration: 3,
     progress: 77,
   },
   done: {
     label: "COMPLETED",
     title: "이제 출국 준비를 시작해보세요",
     description: "타지살이와 함께 차근차근 준비하기",
-    illustration: "✈️",
+    illustration: 4,
   },
 }
 
