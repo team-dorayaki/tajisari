@@ -1,5 +1,6 @@
 package com.tajisali.settlement.dto;
 
+import com.tajisali.settlement.domain.MonthlyLivingCostInputMethod;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -28,12 +29,8 @@ public class SettlementPlanCreateRequest {
     private Integer plannedStayMonths;
 
     @NotNull
-    @Min(0)
-    private Integer noIncomePeriodMonths;
-
-    @NotNull
     @Valid
-    private CurrencyAmountsRequest availableFunds;
+    private CurrencyAmountsRequest preparedFunds;
 
     @NotNull
     @Valid
@@ -46,4 +43,7 @@ public class SettlementPlanCreateRequest {
     @NotNull
     @Size(max = 6)
     private List<@NotNull @Valid SettlementPlanCostItemRequest> monthlyLivingCosts;
+
+    @NotNull
+    private MonthlyLivingCostInputMethod monthlyLivingCostInputMethod;
 }

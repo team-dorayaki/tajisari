@@ -8,7 +8,7 @@ import lombok.Getter;
 public class SettlementPlanCreateResponse {
 
     private final Long planId;
-    private final CurrencyTotalsResponse initialCostTotals;
+    private final CurrencyTotalsResponse additionalInitialCostTotals;
     private final CurrencyTotalsResponse monthlyLivingCostTotals;
     private final String status;
 }

@@ -6,6 +6,7 @@ import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.common.exception.GlobalExceptionHandler;
 import com.tajisali.settlement.domain.CostType;
 import com.tajisali.settlement.domain.CurrencyCode;
+import com.tajisali.settlement.domain.MonthlyLivingCostInputMethod;
 import com.tajisali.settlement.dto.CurrencyTotalsResponse;
 import com.tajisali.settlement.dto.SettlementPlanCreateRequest;
 import com.tajisali.settlement.dto.SettlementPlanCreateResponse;
@@ -13,6 +14,7 @@ import com.tajisali.settlement.service.SettlementPlanService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -42,8 +44,9 @@ class SettlementPlanControllerTest {
     @MockitoBean
     private SettlementPlanService settlementPlanService;
 
-    @Test
-    void 정상_요청은_Service에_전달되고_생성_응답을_반환한다() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"DIRECT", "DEFAULT"})
+    void 정상_요청은_Service에_전달되고_생성_응답을_반환한다(String inputMethod) throws Exception {
         // given
         var serviceResponse = new SettlementPlanCreateResponse(
                 1L,
@@ -56,14 +59,14 @@ class SettlementPlanControllerTest {
         // when
         mockMvc.perform(post("/api/settlement-plans")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRequestJson()))
+                        .content(validRequestJson().replace("\"DEFAULT\"", "\"" + inputMethod + "\"")))
 
                 // then
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.planId").value(1))
-                .andExpect(jsonPath("$.data.initialCostTotals.krw").value(0))
-                .andExpect(jsonPath("$.data.initialCostTotals.jpy").value(62_000))
+                .andExpect(jsonPath("$.data.additionalInitialCostTotals.krw").value(0))
+                .andExpect(jsonPath("$.data.additionalInitialCostTotals.jpy").value(62_000))
                 .andExpect(jsonPath("$.data.monthlyLivingCostTotals.krw").value(0))
                 .andExpect(jsonPath("$.data.monthlyLivingCostTotals.jpy").value(115_000))
                 .andExpect(jsonPath("$.data.status").value("SAVED"))
@@ -77,8 +80,10 @@ class SettlementPlanControllerTest {
 
         assertThat(request.getMoveInDate())
                 .isEqualTo(LocalDate.of(2026, 10, 15));
-        assertThat(request.getAvailableFunds().getKrw())
+        assertThat(request.getPreparedFunds().getKrw())
                 .isEqualTo(8_000_000L);
+        assertThat(request.getMonthlyLivingCostInputMethod())
+                .isEqualTo(MonthlyLivingCostInputMethod.valueOf(inputMethod));
         assertThat(request.getAdditionalInitialCosts().getFirst().getAmount())
                 .isEqualTo(40_000L);
         assertThat(request.getAdditionalInitialCosts().getFirst().getCurrency())
@@ -175,8 +180,8 @@ class SettlementPlanControllerTest {
     private static Stream<String> invalidInputBodies() {
         return Stream.of(
                 validRequestJson().replace(
-                        "\"availableFunds\": {\"krw\": 8000000, \"jpy\": 100000}",
-                        "\"availableFunds\": null"),
+                        "\"preparedFunds\": {\"krw\": 8000000, \"jpy\": 100000}",
+                        "\"preparedFunds\": null"),
                 validRequestJson().replace(
                         "\"plannedStayMonths\": 12",
                         "\"plannedStayMonths\": 25"),
@@ -185,7 +190,13 @@ class SettlementPlanControllerTest {
                         "\"amount\": -1"),
                 validRequestJson().replace(
                         "{\"type\": \"AIRFARE\", \"amount\": 40000, \"currency\": \"JPY\"}",
-                        "null"));
+                        "null"),
+                validRequestJson().replace(
+                        ",\n  \"monthlyLivingCostInputMethod\": \"DEFAULT\"",
+                        ""),
+                validRequestJson().replace(
+                        "\"monthlyLivingCostInputMethod\": \"DEFAULT\"",
+                        "\"monthlyLivingCostInputMethod\": null"));
     }
 
     private static Stream<String> invalidRequestBodies() {
@@ -204,7 +215,10 @@ class SettlementPlanControllerTest {
                         "\"plannedStayMonths\": 12.5"),
                 validRequestJson().replace(
                         "\"type\": \"AIRFARE\"",
-                        "\"type\": 0"));
+                        "\"type\": 0"),
+                validRequestJson().replace(
+                        "\"monthlyLivingCostInputMethod\": \"DEFAULT\"",
+                        "\"monthlyLivingCostInputMethod\": \"UNKNOWN\""));
     }
 
     private static String validRequestJson() {
@@ -212,15 +226,15 @@ class SettlementPlanControllerTest {
                 {
                   "moveInDate": "2026-10-15",
                   "plannedStayMonths": 12,
-                  "noIncomePeriodMonths": 3,
-                  "availableFunds": {"krw": 8000000, "jpy": 100000},
+                  "preparedFunds": {"krw": 8000000, "jpy": 100000},
                   "emergencyReserve": {"krw": 1000000, "jpy": 0},
                   "additionalInitialCosts": [
                     {"type": "AIRFARE", "amount": 40000, "currency": "JPY"}
                   ],
                   "monthlyLivingCosts": [
                     {"type": "FOOD", "amount": 40000, "currency": "JPY"}
-                  ]
+                  ],
+                  "monthlyLivingCostInputMethod": "DEFAULT"
                 }
                 """;
     }
