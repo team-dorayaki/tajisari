@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { AlertCircle, ArrowLeft, Check, ChevronRight, Info } from "lucide-react"
+import { AlertCircle, ArrowLeft, Check, ChevronRight, Info, X } from "lucide-react"
 import { Controller, useForm, useWatch, type UseFormRegisterReturn } from "react-hook-form"
 import { useNavigate } from "react-router-dom"
 import { z } from "zod"
 
 import { BrandInsightCard } from "@/components/ui/brand-insight-card"
+import { ErrorToast } from "@/components/ui/error-toast"
 import { usePropertyCostsStore } from "@/features/properties/store/property-costs-store"
 import type { CostItem, CostSectionData, CostVerification, PropertyInfo, VerificationType } from "@/features/properties/store/property-costs-store"
 import { cn } from "@/lib/utils"
@@ -55,15 +56,16 @@ function CostsHeader({ title, onBack }: { title: string; onBack?: () => void }) 
   )
 }
 
-function CostSection({ section, onEdit }: { section: CostSectionData; onEdit?: () => void }) {
+function CostSection({ section, disabled = false, onEdit }: { section: CostSectionData; disabled?: boolean; onEdit?: () => void }) {
   return (
     <section className="border-b-8 border-[#f5f6f7] bg-white px-4 py-5">
       <div className="relative">
         <h2 className="text-base font-bold">{section.title}{section.showItemCount ? ` (${section.items.length})` : ""}</h2>
         <button
           type="button"
+          disabled={disabled}
           onClick={onEdit}
-          className="absolute top-1/2 right-0 min-h-11 -translate-y-1/2 px-1 text-xs font-bold text-[var(--brand)]"
+          className="absolute top-1/2 right-0 min-h-11 -translate-y-1/2 px-1 text-xs font-bold text-[var(--brand)] disabled:cursor-not-allowed disabled:text-[var(--text-secondary)]"
         >
           수정 <ChevronRight aria-hidden="true" className="inline size-3" />
         </button>
@@ -98,17 +100,24 @@ function CostSection({ section, onEdit }: { section: CostSectionData; onEdit?: (
   )
 }
 
-function BottomSheet({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+function BottomSheet({ children, onClose, showClose = false }: { children: ReactNode; onClose: () => void; showClose?: boolean }) {
   return (
     <div className="bottom-sheet-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/30" role="presentation" onMouseDown={onClose}>
       <section
         role="dialog"
         aria-modal="true"
-        className="bottom-sheet-panel max-h-[88dvh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl bg-white px-5 pt-3 pb-[calc(18px+env(safe-area-inset-bottom))] shadow-2xl"
+        className="bottom-sheet-panel relative max-h-[88dvh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl bg-white px-5 pt-3 pb-[calc(18px+env(safe-area-inset-bottom))] shadow-2xl"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-[#dde2e5]" />
-        <button type="button" onClick={onClose} className="sr-only">닫기</button>
+        <button
+          type="button"
+          onClick={onClose}
+          className={showClose ? "absolute top-11 right-4 grid size-11 place-items-center text-[var(--text-secondary)]" : "sr-only"}
+          aria-label="닫기"
+        >
+          {showClose && <X aria-hidden="true" className="size-6" strokeWidth={1.8} />}
+        </button>
         {children}
       </section>
     </div>
@@ -201,18 +210,32 @@ function EditableCostsSheet({ section, onApply, onClose }: { section: CostSectio
   })
 
   return (
-    <BottomSheet onClose={onClose}>
-      <form onSubmit={handleSubmit(({ amounts }) => onApply(amounts))} noValidate>
-        <h2 className="text-lg font-bold">{section.title} 수정</h2>
-        <p className="mt-1 text-xs text-[var(--text-secondary)]">확인한 금액을 엔화 기준으로 입력해주세요.</p>
-        <div className="mt-5 divide-y divide-[#edf0f2]">
-          {section.items.map((item) => (
-            <label key={item.id} className="flex min-h-[68px] items-center justify-between gap-4 py-2">
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold">{item.label}</span>
-                {getCostItemBadge(item) && <span className="mt-1 block text-[10px] font-bold text-[#ff705d]">{getCostItemBadge(item)}</span>}
+    <BottomSheet onClose={onClose} showClose>
+      <form className="flex min-h-[76dvh] flex-col" onSubmit={handleSubmit(({ amounts }) => onApply(amounts))} noValidate>
+        <h2 className="pr-12 text-lg font-bold">{section.title}</h2>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">AI가 찾은 값을 확인하고 필요한 항목만 수정해주세요.</p>
+        <div className="mt-5 space-y-1">
+          {section.items.map((item) => {
+            const editStatus = getEditableCostStatus(item)
+
+            return (
+            <label key={item.id} className="flex min-h-14 items-center justify-between gap-4">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="text-sm font-semibold">{item.label}</span>
+                {editStatus && (
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold",
+                      editStatus.tone === "warning"
+                        ? "bg-[#fff3d6] text-[#d58a13]"
+                        : "bg-[#eef1f4] text-[#7f8998]",
+                    )}
+                  >
+                    {editStatus.label}
+                  </span>
+                )}
               </span>
-              <span className="flex h-10 w-32 shrink-0 items-center rounded-lg border border-[#dce1e4] px-3 focus-within:border-[var(--brand)]">
+              <span className="flex h-10 w-32 shrink-0 items-center border-b border-[#dce1e4] focus-within:border-[var(--brand)]">
                 <Controller
                   name={`amounts.${item.id}`}
                   control={control}
@@ -221,26 +244,25 @@ function EditableCostsSheet({ section, onApply, onClose }: { section: CostSectio
                       aria-label={`${item.label} 금액`}
                       type="text"
                       inputMode="numeric"
-                      value={field.value}
+                      value={formatNumericInput(field.value)}
                       placeholder="금액 입력"
                       onBlur={field.onBlur}
                       onChange={(event) => field.onChange(event.target.value.replace(/\D/g, ""))}
                       ref={field.ref}
-                      className="min-w-0 flex-1 bg-transparent text-right text-sm tabular-nums outline-none placeholder:text-[11px] placeholder:text-[#aab2bb]"
+                      className="min-w-0 flex-1 bg-transparent text-right text-sm font-semibold tabular-nums outline-none placeholder:font-normal placeholder:text-[var(--text-secondary)]"
                     />
                   )}
                 />
-                <span className="ml-1 text-[10px] text-[var(--text-secondary)]">JPY</span>
               </span>
             </label>
-          ))}
+          )})}
         </div>
         <button
           type="submit"
           disabled={!isValid}
-          className="mt-6 h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d9dfe4]"
+          className="mt-auto h-14 w-full rounded-xl bg-[var(--brand)] text-base font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d9dfe4]"
         >
-          수정 내용 적용
+          변경사항 저장
         </button>
       </form>
     </BottomSheet>
@@ -436,6 +458,20 @@ function formatCostItemValue(item: CostItem) {
   return `¥${item.amount.toLocaleString("en-US")}${item.monthly ? " /월" : ""}`
 }
 
+function formatNumericInput(value: string) {
+  return value ? Number(value).toLocaleString("en-US") : ""
+}
+
+function getEditableCostStatus(item: CostItem) {
+  if (item.amount === null || item.verifications.some((verification) => verification.type === "AMOUNT" && verification.status === "PENDING")) {
+    return { label: "미표기", tone: "neutral" as const }
+  }
+  if (item.verifications.some((verification) => verification.status === "PENDING")) {
+    return { label: "미확인", tone: "warning" as const }
+  }
+  return undefined
+}
+
 function formatVerificationAnswer(type: VerificationType, answer: string) {
   if (type === "AMOUNT") return `¥${Number(answer).toLocaleString("en-US")}`
   return verificationPresentation[type].choices.find((choice) => choice.value === answer)?.label ?? answer
@@ -468,8 +504,10 @@ function PropertyCostsPage() {
   const costSections = usePropertyCostsStore((state) => state.costSections)
   const updatePropertyInfo = usePropertyCostsStore((state) => state.updatePropertyInfo)
   const updateCostAmounts = usePropertyCostsStore((state) => state.updateCostAmounts)
-  const finalSaveStatus = usePropertyCostsStore((state) => state.finalSaveStatus)
-  const savePropertyDraft = usePropertyCostsStore((state) => state.savePropertyDraft)
+  const submissionStatus = usePropertyCostsStore((state) => state.submissionStatus)
+  const submissionError = usePropertyCostsStore((state) => state.submissionError)
+  const clearSubmissionError = usePropertyCostsStore((state) => state.clearSubmissionError)
+  const submitPropertyAndCalculate = usePropertyCostsStore((state) => state.submitPropertyAndCalculate)
   const pendingCount = costSections.flatMap((section) => section.items)
     .flatMap((item) => item.verifications)
     .filter((verification) => verification.status === "PENDING").length
@@ -481,6 +519,12 @@ function PropertyCostsPage() {
   const siteBarHeight = Math.max(64, Math.round((siteInitialCost / chartMaximum) * 112))
   const confirmedBarHeight = Math.max(64, Math.round((confirmedInitialCost / chartMaximum) * 112))
   const activeEditSection = costSections.find((section) => section.id === editSheet)
+  const isSubmitting = submissionStatus === "saving" || submissionStatus === "calculating"
+  const submitButtonLabel = submissionStatus === "saving"
+    ? "매물 저장 중..."
+    : submissionStatus === "calculating"
+      ? "비용 계산 중..."
+      : "비용 계산하기"
 
   return (
     <main className="min-h-dvh bg-[#f5f6f7]">
@@ -512,8 +556,9 @@ function PropertyCostsPage() {
         <div className="bg-white">
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={() => void navigate("/properties/costs/review")}
-            className="flex min-h-[72px] w-full items-center gap-3 bg-[#15171c] px-4 text-left text-white"
+            className="flex min-h-[72px] w-full items-center gap-3 bg-[#15171c] px-4 text-left text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             <AlertCircle aria-hidden="true" className="size-5 shrink-0 text-[var(--brand)]" />
             <span className="min-w-0 flex-1">
@@ -528,10 +573,11 @@ function PropertyCostsPage() {
       <section className="border-b-8 border-[#f5f6f7] bg-white px-4 py-5">
         <div className="relative">
           <h2 className="text-base font-bold">매물 기본정보</h2>
-          <button
-            type="button"
-            onClick={() => setEditSheet("property")}
-            className="absolute top-1/2 right-0 min-h-11 -translate-y-1/2 px-1 text-xs font-bold text-[var(--brand)]"
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => setEditSheet("property")}
+              className="absolute top-1/2 right-0 min-h-11 -translate-y-1/2 px-1 text-xs font-bold text-[var(--brand)] disabled:cursor-not-allowed disabled:text-[var(--text-secondary)]"
           >
             수정 <ChevronRight className="inline size-3" />
           </button>
@@ -548,6 +594,7 @@ function PropertyCostsPage() {
         <CostSection
           key={section.id}
           section={section}
+          disabled={isSubmitting}
           onEdit={() => setEditSheet(section.id)}
         />
       ))}
@@ -577,17 +624,21 @@ function PropertyCostsPage() {
         <p className="mt-4 text-xs text-[#ff705d]">선택·확인 필요·조건부 비용은 {formatYen(confirmedInitialCost)}에 포함하지 않았어요.</p>
       </section>
 
-      <section className="bg-[#f5f6f7] px-4 pt-6 pb-[calc(18px+env(safe-area-inset-bottom))]">
+      <section className="relative bg-[#f5f6f7] px-4 pt-6 pb-[calc(18px+env(safe-area-inset-bottom))]">
+        {submissionError && (
+          <ErrorToast key={submissionError.id} message={submissionError.message} onDismiss={clearSubmissionError} />
+        )}
         <button
           type="button"
-          disabled={finalSaveStatus === "saving"}
-          onClick={async () => {
-            await savePropertyDraft()
-            void navigate("/properties")
+          disabled={isSubmitting}
+          onClick={() => {
+            void submitPropertyAndCalculate()
+              .then((propertyId) => void navigate(`/properties/${propertyId}`, { replace: true }))
+              .catch(() => undefined)
           }}
           className="h-14 w-full rounded-xl bg-[var(--brand)] text-base font-bold text-white disabled:cursor-wait disabled:bg-[#65c5b8]"
         >
-          {finalSaveStatus === "saving" ? "매물 저장 중..." : "매물 최종 저장"}
+          {submitButtonLabel}
         </button>
       </section>
 

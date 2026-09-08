@@ -8,6 +8,7 @@ import { StartPage } from "@/features/onboarding/pages/start-page"
 import { PropertiesPage } from "@/features/properties/pages/properties-page"
 import { PropertyAnalysisLoadingPage } from "@/features/properties/pages/property-analysis-loading-page"
 import { PropertyCostsPage, RequiredCostsPage } from "@/features/properties/pages/property-costs-page"
+import { PropertyDetailPage } from "@/features/properties/pages/property-detail-page"
 import {
   ImageRegistrationPage,
   PropertyRegistrationPage,
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
       { path: "properties/analyzing", element: <PropertyAnalysisLoadingPage /> },
       { path: "properties/costs", element: <PropertyCostsPage /> },
       { path: "properties/costs/review", element: <RequiredCostsPage /> },
+      { path: "properties/:propertyId", element: <PropertyDetailPage /> },
       { path: "properties/compare", element: <ComingSoonPage /> },
       { path: "my", element: <ComingSoonPage /> },
       { path: "checklist", element: <ComingSoonPage /> },

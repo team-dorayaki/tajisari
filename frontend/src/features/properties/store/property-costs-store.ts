@@ -1,5 +1,7 @@
 import { create } from "zustand"
 
+import { calculateProperty, saveProperty } from "@/features/properties/api/property-costs-api"
+
 type VerificationType = "AMOUNT" | "OCCURRENCE_TIMING" | "REQUIREDNESS" | "BROKER_CONFIRMATION"
 type VerificationStatus = "PENDING" | "RESOLVED"
 type CalculationPeriod = "INITIAL" | "MONTHLY" | "FUTURE"
@@ -41,23 +43,32 @@ type PropertyInfo = {
   contractMonths: string
 }
 
+type SubmissionStatus = "idle" | "saving" | "calculating" | "saveError" | "calculationError" | "success"
+
+type SubmissionError = {
+  id: number
+  stage: "save" | "calculation"
+  message: string
+}
+
 type PropertyCostsState = {
   propertyInfo: PropertyInfo
   siteInitialCost: number
   costSections: CostSectionData[]
   draftVerificationAnswers: Record<string, string>
   draftSelectedCostIds: string[] | null
-  finalSaveStatus: "idle" | "saving" | "saved" | "error"
+  submissionStatus: SubmissionStatus
+  savedPropertyId: string | null
+  submissionError: SubmissionError | null
   updatePropertyInfo: (propertyInfo: PropertyInfo) => void
   updateCostAmounts: (values: Record<string, string>) => void
   updateDraftSelectedCostIds: (ids: string[]) => void
   updateDraftVerification: (verificationId: string, answer: string) => void
   saveReviewDraft: () => void
   discardReviewDraft: () => void
-  savePropertyDraft: () => Promise<void>
+  clearSubmissionError: () => void
+  submitPropertyAndCalculate: () => Promise<string>
 }
-
-type PropertyDraftPayload = Pick<PropertyCostsState, "propertyInfo" | "siteInitialCost" | "costSections">
 
 const mockCostSections: CostSectionData[] = [
   {
@@ -147,19 +158,22 @@ const timingPeriod: Record<string, CalculationPeriod> = {
   MOVE_OUT: "FUTURE",
 }
 
-async function mockSaveProperty(payload: PropertyDraftPayload) {
-  await new Promise((resolve) => globalThis.setTimeout(resolve, 500))
-  return payload
-}
-
 const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
   propertyInfo: { name: "신주쿠 원룸 A", area: "도쿄도 신주쿠", moveInDate: "2026-10-15", contractMonths: "24" },
   siteInitialCost: 320_000,
   costSections: mockCostSections,
   draftVerificationAnswers: {},
   draftSelectedCostIds: null,
-  finalSaveStatus: "idle",
-  updatePropertyInfo: (propertyInfo) => set({ propertyInfo }),
+  submissionStatus: "idle",
+  savedPropertyId: null,
+  submissionError: null,
+  updatePropertyInfo: (propertyInfo) =>
+    set({
+      propertyInfo,
+      submissionStatus: "idle",
+      savedPropertyId: null,
+      submissionError: null,
+    }),
   updateCostAmounts: (values) =>
     set((state) => ({
       costSections: state.costSections.map((section) => ({
@@ -168,6 +182,9 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
           item.id in values ? { ...item, amount: values[item.id] ? Number(values[item.id]) : null } : item,
         ),
       })),
+      submissionStatus: "idle",
+      savedPropertyId: null,
+      submissionError: null,
     })),
   updateDraftSelectedCostIds: (draftSelectedCostIds) => set({ draftSelectedCostIds }),
   updateDraftVerification: (verificationId, answer) =>
@@ -195,21 +212,55 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
       })),
       draftVerificationAnswers: {},
       draftSelectedCostIds: null,
+      submissionStatus: "idle",
+      savedPropertyId: null,
+      submissionError: null,
     })),
   discardReviewDraft: () => set({ draftVerificationAnswers: {}, draftSelectedCostIds: null }),
-  savePropertyDraft: async () => {
-    set({ finalSaveStatus: "saving" })
-    const { propertyInfo, siteInitialCost, costSections } = get()
+  clearSubmissionError: () => set({ submissionError: null }),
+  submitPropertyAndCalculate: async () => {
+    let propertyId = get().savedPropertyId
+
+    if (!propertyId) {
+      set({ submissionStatus: "saving", submissionError: null })
+      const { propertyInfo, siteInitialCost, costSections } = get()
+
+      try {
+        const response = await saveProperty({ propertyInfo, siteInitialCost, costSections })
+        propertyId = response.propertyId
+        set({ savedPropertyId: propertyId })
+      } catch (error) {
+        set((state) => ({
+          submissionStatus: "saveError",
+          submissionError: {
+            id: (state.submissionError?.id ?? 0) + 1,
+            stage: "save",
+            message: "매물 저장에 실패했어요. 다시 시도해주세요.",
+          },
+        }))
+        throw error
+      }
+    }
+
+    set({ submissionStatus: "calculating", submissionError: null })
 
     try {
-      await mockSaveProperty({ propertyInfo, siteInitialCost, costSections })
-      set({ finalSaveStatus: "saved" })
+      await calculateProperty(propertyId)
+      set({ submissionStatus: "success" })
+      return propertyId
     } catch (error) {
-      set({ finalSaveStatus: "error" })
+      set((state) => ({
+        submissionStatus: "calculationError",
+        submissionError: {
+          id: (state.submissionError?.id ?? 0) + 1,
+          stage: "calculation",
+          message: "비용 계산에 실패했어요. 다시 시도해주세요.",
+        },
+      }))
       throw error
     }
   },
 }))
 
 export { usePropertyCostsStore }
-export type { CalculationPeriod, CostItem, CostSectionData, CostVerification, PropertyInfo, VerificationType }
+export type { CalculationPeriod, CostItem, CostSectionData, CostVerification, PropertyInfo, SubmissionStatus, VerificationType }
