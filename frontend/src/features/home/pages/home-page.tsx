@@ -1,4 +1,5 @@
 import { useSearchParams } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 
 import { AppHeader } from "@/components/layout/app-header"
 import { BottomNav } from "@/components/layout/bottom-nav"
@@ -7,11 +8,13 @@ import { PriorityPropertiesCard } from "@/features/home/components/priority-prop
 import { SettlementChecklistCard } from "@/features/home/components/settlement-checklist-card"
 import { SettlementProfileCard } from "@/features/home/components/settlement-profile-card"
 import { homeStageContents, isHomeStage } from "@/features/home/home-data"
+import { fetchHomeProgress } from "@/features/home/api/home-progress-api"
 
 function HomePage() {
   const [searchParams] = useSearchParams()
   const requestedStage = searchParams.get("stage")
-  const stage = isHomeStage(requestedStage) ? requestedStage : "1"
+  const { data: progress } = useQuery({ queryKey: ["home-progress"], queryFn: fetchHomeProgress, staleTime: 30_000 })
+  const stage = isHomeStage(requestedStage) ? requestedStage : (progress?.stage ?? "1")
   const completed = stage === "done"
   const showProfile = stage !== "1"
 

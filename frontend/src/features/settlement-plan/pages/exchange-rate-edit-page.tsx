@@ -4,19 +4,20 @@ import { useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { JPY_TO_KRW_EXCHANGE_RATE } from "@/constants/currency"
-import { updateSettlementPlan } from "@/features/settlement-plan/api/settlement-plan-api"
 
 function ExchangeRateEditPage() {
   const navigate = useNavigate()
   const [rate, setRate] = useState(String(JPY_TO_KRW_EXCHANGE_RATE))
   const [isSaving, setIsSaving] = useState(false)
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
 
   const handleSave = async () => {
     const parsedRate = Number(rate.replaceAll(",", ""))
     if (!Number.isFinite(parsedRate) || parsedRate <= 0) return
 
     setIsSaving(true)
-    await updateSettlementPlan({ exchangeRate: parsedRate, exchangeRateUpdatedAt: "2026-09-08" })
+    window.localStorage.setItem("tajisari.exchangeRate", String(parsedRate))
+    window.localStorage.setItem("tajisari.exchangeRateUpdatedAt", today)
     void navigate("/my")
   }
 
@@ -48,7 +49,7 @@ function ExchangeRateEditPage() {
               aria-label="100엔 환율"
             />
           </div>
-          <p className="mt-4 flex items-center gap-1 text-xs text-[var(--text-secondary)]"><Check className="size-4 text-[var(--brand)]" />2026.09.08 기준으로 적용돼요.</p>
+          <p className="mt-4 flex items-center gap-1 text-xs text-[var(--text-secondary)]"><Check className="size-4 text-[var(--brand)]" />{today.replaceAll("-", ".")} 기준으로 적용돼요.</p>
         </div>
       </section>
       <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[430px] bg-gradient-to-t from-[#f5f6f7] from-70% to-transparent px-4 pt-6 pb-[calc(14px+env(safe-area-inset-bottom))]">

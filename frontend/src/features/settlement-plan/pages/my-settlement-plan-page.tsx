@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { type ReactNode } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { ArrowLeft, ChevronRight, LoaderCircle } from "lucide-react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
@@ -58,22 +59,11 @@ function MySettlementPlanPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const showBackButton = searchParams.get("from") === "home"
-  const [plan, setPlan] = useState<SettlementPlan | null>(null)
-  const [error, setError] = useState(false)
-
-  useEffect(() => {
-    let active = true
-    void fetchSettlementPlan()
-      .then((result) => {
-        if (active) setPlan(result)
-      })
-      .catch(() => {
-        if (active) setError(true)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
+  const { data: plan, isError: error } = useQuery<SettlementPlan>({
+    queryKey: ["settlement-plan"],
+    queryFn: () => fetchSettlementPlan(),
+    staleTime: 30_000,
+  })
 
   return (
     <main className="min-h-dvh bg-[#f5f6f7] pb-[calc(120px+env(safe-area-inset-bottom))]">
