@@ -1,3 +1,13 @@
+CREATE TABLE users (
+    user_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '사용자 식별자',
+    user_key VARCHAR(36) NOT NULL COMMENT '익명 사용자 키',
+    created_at DATETIME(6) NOT NULL COMMENT '생성일시',
+
+    CONSTRAINT pk_users PRIMARY KEY (user_id),
+    CONSTRAINT uk_users_user_key UNIQUE (user_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
 CREATE TABLE property (
     property_id BIGINT NOT NULL AUTO_INCREMENT,
     source_site VARCHAR(50) NULL COMMENT '예: SUUMO, LEOPALACE21, UR임대',
