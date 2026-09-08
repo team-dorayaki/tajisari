@@ -1,15 +1,19 @@
-import { Building2, ChevronRight, Plus } from "lucide-react"
+import { useEffect, useState } from "react"
+import { ChevronRight, ImageOff, Plus } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
 import { BottomNav } from "@/components/layout/bottom-nav"
-
-const properties = [
-  { name: "요코하마 스튜디오", rent: "¥65,000", initialCost: "¥245,000", months: "5.1개월" },
-  { name: "오사카 원룸 B", rent: "¥59,000", initialCost: "¥268,000", months: "4.8개월" },
-]
+import { fetchProperties } from "@/features/properties/api/properties-api"
+import type { PropertySummary } from "@/features/properties/api/properties-api"
 
 function PropertiesPage() {
   const navigate = useNavigate()
+  const [properties, setProperties] = useState<PropertySummary[]>([])
+  const [failedThumbnailIds, setFailedThumbnailIds] = useState<string[]>([])
+
+  useEffect(() => {
+    void fetchProperties().then(setProperties)
+  }, [])
 
   return (
     <main className="flex min-h-dvh flex-col bg-[#f5f6f7] pb-[calc(164px+env(safe-area-inset-bottom))]">
@@ -39,28 +43,34 @@ function PropertiesPage() {
         </div>
 
         <div className="divide-y divide-[#edf0f2] bg-white">
-          {properties.map((property, index) => (
+          {properties.map((property) => (
             <button
-              key={property.name}
+              key={property.id}
               type="button"
+              onClick={() => void navigate(`/properties/${property.id}`)}
               className="flex w-full items-center gap-3 px-4 py-4 text-left"
               aria-label={`${property.name} 상세 보기`}
             >
-              <span
-                className={`grid size-[76px] shrink-0 place-items-center rounded-lg ${
-                  index === 0 ? "bg-[#e4ddd5]" : "bg-[#d9e2e5]"
-                }`}
-              >
-                <Building2 aria-hidden="true" className="size-8 text-[#7c8790]" strokeWidth={1.5} />
+              <span className="grid size-[76px] shrink-0 place-items-center overflow-hidden rounded-lg bg-[#e7edef]">
+                {property.images[0] && !failedThumbnailIds.includes(property.images[0].id) ? (
+                  <img
+                    src={property.images[0].src}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    onError={() => setFailedThumbnailIds((failed) => [...failed, property.images[0].id])}
+                  />
+                ) : (
+                  <ImageOff aria-hidden="true" className="size-7 text-[#7c8790]" strokeWidth={1.5} />
+                )}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-bold">{property.name}</span>
-                <span className="mt-1 block text-xs font-semibold">월 {property.rent}</span>
+                <span className="mt-1 block text-xs font-semibold">월 ¥{property.rent.toLocaleString("en-US")}</span>
                 <span className="mt-1 block text-[11px] text-[var(--text-secondary)]">
-                  초기비용 {property.initialCost}
+                  초기비용 ¥{property.initialCost.toLocaleString("en-US")}
                 </span>
                 <span className="block text-[11px] font-bold text-[var(--brand)]">
-                  생활 가능 {property.months}
+                  생활 가능 {property.livingMonths}
                 </span>
               </span>
               <ChevronRight aria-hidden="true" className="size-5 text-[#98a1aa]" />
