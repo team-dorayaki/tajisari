@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react"
-import { ArrowLeft, ChevronLeft, ChevronRight, CircleAlert, ImageOff, Landmark, ReceiptText } from "lucide-react"
+import { ArrowLeft, ChevronLeft, ChevronRight, CircleAlert, EllipsisVertical, ImageOff, Landmark, ReceiptText, Trash2 } from "lucide-react"
 import { useNavigate, useParams } from "react-router-dom"
 
 import { BottomNav } from "@/components/layout/bottom-nav"
 import { JPY_TO_KRW_EXCHANGE_RATE } from "@/constants/currency"
-import { fetchProperty } from "@/features/properties/api/properties-api"
+import { deleteProperties, fetchProperty } from "@/features/properties/api/properties-api"
 import { PropertyFinancialSimulation } from "@/features/properties/components/property-financial-simulation"
+import { PropertyDeleteDialog } from "@/features/properties/components/property-delete-dialog"
 import type { ExcludedCost, PropertyImage, PropertySummary } from "@/features/properties/api/properties-api"
 import { usePropertyCostsStore } from "@/features/properties/store/property-costs-store"
 import type { CostItem } from "@/features/properties/store/property-costs-store"
@@ -103,6 +104,10 @@ function PropertyDetailPage() {
   const monthlyLivingCost = useSettlementPlanStore((state) => Object.values(state.monthlyCosts).reduce((total, amount) => total + amount, 0))
   const [property, setProperty] = useState<PropertySummary | null>(null)
   const [activeTab, setActiveTab] = useState<"costs" | "simulation">("costs")
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -138,9 +143,34 @@ function PropertyDetailPage() {
     excludedCosts: [] as ExcludedCost[],
   }
 
+  async function confirmDelete() {
+    setIsDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteProperties([propertyId])
+      void navigate("/properties", { replace: true })
+    } catch {
+      setDeleteError("매물을 삭제하지 못했어요. 다시 시도해주세요.")
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <main className="min-h-dvh bg-[#f5f6f7] pb-[calc(116px+env(safe-area-inset-bottom))]" aria-label="매물 상세 비용 분석">
-      <header className="sticky top-0 z-20 bg-white pt-[env(safe-area-inset-top)]"><div className="grid h-14 grid-cols-[44px_1fr_44px] items-center px-2"><button type="button" onClick={() => void navigate("/properties", { replace: true })} className="grid size-11 place-items-center rounded-full" aria-label="매물 목록으로 돌아가기"><ArrowLeft aria-hidden="true" className="size-5" /></button><h1 className="text-center text-sm font-bold">{displayedProperty.name}</h1></div></header>
+      <header className="sticky top-0 z-20 bg-white pt-[env(safe-area-inset-top)]">
+        <div className="relative grid h-14 grid-cols-[44px_1fr_44px] items-center px-2">
+          <button type="button" onClick={() => void navigate("/properties", { replace: true })} className="grid size-11 place-items-center rounded-full" aria-label="매물 목록으로 돌아가기"><ArrowLeft aria-hidden="true" className="size-5" /></button>
+          <h1 className="truncate px-2 text-center text-sm font-bold">{displayedProperty.name}</h1>
+          <button type="button" onClick={() => setMenuOpen((open) => !open)} className="grid size-11 place-items-center rounded-full" aria-label="매물 더보기" aria-expanded={menuOpen}><EllipsisVertical aria-hidden="true" className="size-5" /></button>
+          {menuOpen && (
+            <div className="absolute top-12 right-2 z-30 w-36 rounded-xl border border-[#e5e9ec] bg-white p-1 shadow-lg" role="menu">
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setDeleteError(null); setDeleteDialogOpen(true) }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[#e45f4c] hover:bg-[#fff0ed]">
+                <Trash2 aria-hidden="true" className="size-4" /> 매물 삭제
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
       <PropertyImageCarousel images={displayedProperty.images} propertyName={displayedProperty.name} />
       <section className="bg-white px-4 pt-4"><h2 className="text-base font-bold">{displayedProperty.name}</h2><p className="mt-1 text-[11px] text-[var(--text-secondary)]">월세 {formatYen(displayedProperty.rent)} · 관리비 {formatYen(displayedProperty.managementFee)}</p><p className="mt-1 text-[11px] text-[var(--text-secondary)]">{displayedProperty.area} · {displayedProperty.moveInDate.replaceAll("-", ".")} 입주 가능</p><div className="mt-5 grid grid-cols-2 text-center text-xs font-semibold"><button type="button" onClick={() => setActiveTab("costs")} className={`border-b-2 pb-3 ${activeTab === "costs" ? "border-[var(--brand)] text-[var(--foreground)]" : "border-transparent text-[var(--text-secondary)]"}`}>비용 분석</button><button type="button" onClick={() => setActiveTab("simulation")} className={`border-b-2 pb-3 ${activeTab === "simulation" ? "border-[var(--brand)] text-[var(--foreground)]" : "border-transparent text-[var(--text-secondary)]"}`}>자금 시뮬레이션</button></div></section>
       {activeTab === "simulation" ? <PropertyFinancialSimulation availableKrw={availableKrw} exchangeRate={JPY_TO_KRW_EXCHANGE_RATE} initialCost={estimatedInitialCost} monthlyHousingCost={monthlyCost} monthlyLivingCost={monthlyLivingCost} estimatedExitCost={estimatedExitCost} stayMonths={stayMonths} excludedCosts={displayedProperty.excludedCosts} /> : <>
@@ -153,6 +183,7 @@ function PropertyDetailPage() {
       {displayedProperty.excludedCosts.length > 0 && <section className="border-b-8 border-[#f5f6f7] bg-white px-4 py-5"><div className="flex items-start gap-2"><span className="mt-0.5 grid size-5 place-items-center rounded-full bg-[#fff4d8] text-[#c58b25]"><CircleAlert aria-hidden="true" className="size-3.5" /></span><div><h2 className="text-sm font-bold">계산에 포함되지 않은 항목</h2><p className="mt-1 text-[11px] text-[var(--text-secondary)]">아직 확인되지 않은 비용은 계산에서 제외했어요.</p></div></div><ul className="mt-4 divide-y divide-[#eef0f2] border-y border-[#eef0f2]">{displayedProperty.excludedCosts.map((item) => <li key={`${item.category}-${item.label}`} className="flex min-h-14 items-center gap-3 text-sm"><span className="min-w-0 flex-1">{item.label}</span><span className="shrink-0 text-[11px] text-[var(--text-secondary)]">{item.category}</span></li>)}</ul></section>}
       </>}
       <BottomNav />
+      {deleteDialogOpen && <PropertyDeleteDialog count={1} isDeleting={isDeleting} error={deleteError} onCancel={() => setDeleteDialogOpen(false)} onConfirm={() => void confirmDelete()} />}
     </main>
   )
 }
