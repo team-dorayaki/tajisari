@@ -105,6 +105,7 @@ function PropertyDetailPage() {
   const [activeTab, setActiveTab] = useState<"costs" | "simulation">("costs")
 
   useEffect(() => {
+    window.scrollTo(0, 0)
     void fetchProperty(propertyId).then(setProperty)
   }, [propertyId])
 
@@ -139,7 +140,7 @@ function PropertyDetailPage() {
 
   return (
     <main className="min-h-dvh bg-[#f5f6f7] pb-[calc(116px+env(safe-area-inset-bottom))]" aria-label="매물 상세 비용 분석">
-      <header className="sticky top-0 z-20 bg-white pt-[env(safe-area-inset-top)]"><div className="grid h-14 grid-cols-[44px_1fr_44px] items-center px-2"><button type="button" onClick={() => void navigate(-1)} className="grid size-11 place-items-center rounded-full" aria-label="뒤로 가기"><ArrowLeft aria-hidden="true" className="size-5" /></button><h1 className="text-center text-sm font-bold">{displayedProperty.name}</h1></div></header>
+      <header className="sticky top-0 z-20 bg-white pt-[env(safe-area-inset-top)]"><div className="grid h-14 grid-cols-[44px_1fr_44px] items-center px-2"><button type="button" onClick={() => void navigate("/properties", { replace: true })} className="grid size-11 place-items-center rounded-full" aria-label="매물 목록으로 돌아가기"><ArrowLeft aria-hidden="true" className="size-5" /></button><h1 className="text-center text-sm font-bold">{displayedProperty.name}</h1></div></header>
       <PropertyImageCarousel images={displayedProperty.images} propertyName={displayedProperty.name} />
       <section className="bg-white px-4 pt-4"><h2 className="text-base font-bold">{displayedProperty.name}</h2><p className="mt-1 text-[11px] text-[var(--text-secondary)]">월세 {formatYen(displayedProperty.rent)} · 관리비 {formatYen(displayedProperty.managementFee)}</p><p className="mt-1 text-[11px] text-[var(--text-secondary)]">{displayedProperty.area} · {displayedProperty.moveInDate.replaceAll("-", ".")} 입주 가능</p><div className="mt-5 grid grid-cols-2 text-center text-xs font-semibold"><button type="button" onClick={() => setActiveTab("costs")} className={`border-b-2 pb-3 ${activeTab === "costs" ? "border-[var(--brand)] text-[var(--foreground)]" : "border-transparent text-[var(--text-secondary)]"}`}>비용 분석</button><button type="button" onClick={() => setActiveTab("simulation")} className={`border-b-2 pb-3 ${activeTab === "simulation" ? "border-[var(--brand)] text-[var(--foreground)]" : "border-transparent text-[var(--text-secondary)]"}`}>자금 시뮬레이션</button></div></section>
       {activeTab === "simulation" ? <PropertyFinancialSimulation availableKrw={availableKrw} exchangeRate={JPY_TO_KRW_EXCHANGE_RATE} initialCost={estimatedInitialCost} monthlyHousingCost={monthlyCost} monthlyLivingCost={monthlyLivingCost} estimatedExitCost={estimatedExitCost} stayMonths={stayMonths} excludedCosts={displayedProperty.excludedCosts} /> : <>
