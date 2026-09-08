@@ -10,6 +10,7 @@ public enum ErrorCode {
     COMMON_INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 형식을 확인해 주세요."),
     COMMON_INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값을 확인해 주세요."),
 
+    SETTLEMENT_PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "정착 계획을 찾을 수 없습니다."),
     SETTLEMENT_PLAN_RESERVE_EXCEEDS_FUNDS(HttpStatus.BAD_REQUEST, "비상예비비는 같은 통화의 준비자금을 초과할 수 없습니다."),
     SETTLEMENT_PLAN_INVALID_COST_TYPE(HttpStatus.BAD_REQUEST, "해당 비용 구분에서 사용할 수 없는 비용 종류입니다."),
     SETTLEMENT_PLAN_DUPLICATE_COST_TYPE(HttpStatus.BAD_REQUEST, "같은 비용 구분에 동일한 비용 종류를 중복 입력할 수 없습니다."),

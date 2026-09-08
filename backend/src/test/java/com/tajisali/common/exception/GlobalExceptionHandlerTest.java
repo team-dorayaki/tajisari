@@ -38,6 +38,7 @@ class GlobalExceptionHandlerTest {
     @CsvSource({
             "COMMON_INVALID_REQUEST, 400",
             "COMMON_INVALID_INPUT, 400",
+            "SETTLEMENT_PLAN_NOT_FOUND, 404",
             "SETTLEMENT_PLAN_RESERVE_EXCEEDS_FUNDS, 400",
             "SETTLEMENT_PLAN_INVALID_COST_TYPE, 400",
             "SETTLEMENT_PLAN_DUPLICATE_COST_TYPE, 400",
@@ -116,7 +117,7 @@ class GlobalExceptionHandlerTest {
     void 쿼리_타입_변환에_실패하면_400을_유지한다() throws Exception {
         var result = mockMvc.perform(get("/test/parameter").param("count", "invalid")).andReturn();
 
-        assertThat(result.getResponse().getStatus()).isEqualTo(400);
+        assertError(result, 400, "COMMON_INVALID_REQUEST");
         assertThat(result.getResolvedException())
                 .isInstanceOf(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class);
     }
