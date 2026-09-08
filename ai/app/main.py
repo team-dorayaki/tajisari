@@ -10,6 +10,7 @@ from fastapi.openapi.utils import get_openapi
 from app.api.routes.health import router as health_router
 from app.api.routes.image_analysis import router as analysis_router
 from app.core.config import settings
+from app.core.errors import register_exception_handlers
 from app.core.logging_config import configure_logging, request_id_context
 
 
@@ -23,6 +24,7 @@ app = FastAPI(
     version="1.0.0",
     description="Gemini 기반 일본 부동산 매물 이미지 및 URL 분석 API",
 )
+register_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,

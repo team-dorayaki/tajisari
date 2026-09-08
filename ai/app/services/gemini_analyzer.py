@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 
 from app.core.config import settings
+from app.core.errors import AppError
 from gemini_analyze_image import DEFAULT_PROMPT, analyze_images, analyze_webpage
 
 
@@ -21,9 +22,14 @@ def analyze_uploaded_images(
 ) -> dict:
     """업로드된 이미지 바이트를 임시 파일로 전달하고 즉시 정리한다."""
     if not uploaded_images:
-        raise ValueError("분석할 이미지를 한 개 이상 업로드해 주세요.")
+        raise AppError("IMAGE_REQUIRED", "분석할 이미지를 한 개 이상 업로드해 주세요.")
     if len(uploaded_images) > settings.max_image_count:
-        raise ValueError(f"이미지는 최대 {settings.max_image_count}개까지 업로드할 수 있습니다.")
+        raise AppError(
+            "TOO_MANY_IMAGES",
+            f"이미지는 최대 {settings.max_image_count}개까지 업로드할 수 있습니다.",
+            413,
+            False,
+        )
 
     selected_model = model or settings.gemini_model
     selected_prompt = prompt or DEFAULT_PROMPT
@@ -31,12 +37,20 @@ def analyze_uploaded_images(
         image_paths = []
         for index, (filename, content_type, content) in enumerate(uploaded_images, start=1):
             if content_type not in ALLOWED_IMAGE_TYPES:
-                raise ValueError(f"지원하지 않는 이미지 형식입니다: {filename} ({content_type})")
+                raise AppError(
+                    "INVALID_IMAGE_TYPE",
+                    f"지원하지 않는 이미지 형식입니다: {filename} ({content_type})",
+                )
             if not content:
-                raise ValueError(f"빈 이미지 파일입니다: {filename}")
+                raise AppError("EMPTY_IMAGE", f"빈 이미지 파일입니다: {filename}")
             if len(content) > settings.max_image_bytes:
                 limit_mb = settings.max_image_bytes // (1024 * 1024)
-                raise ValueError(f"이미지 한 개의 크기는 {limit_mb}MB 이하여야 합니다: {filename}")
+                raise AppError(
+                    "IMAGE_TOO_LARGE",
+                    f"이미지 한 개의 크기는 {limit_mb}MB 이하여야 합니다: {filename}",
+                    413,
+                    False,
+                )
             path = Path(temp_dir) / f"image_{index}{ALLOWED_IMAGE_TYPES[content_type]}"
             path.write_bytes(content)
             image_paths.append(path)

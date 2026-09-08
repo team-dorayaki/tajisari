@@ -148,7 +148,28 @@ Invoke-RestMethod `
 }
 ```
 
-입력 오류는 HTTP 400, Gemini 호출 또는 응답 처리 실패는 HTTP 502로 반환합니다.
+오류 응답은 프론트엔드에서 구분할 수 있도록 공통 형식으로 반환합니다.
+
+```json
+{
+  "error": {
+    "code": "GEMINI_RATE_LIMIT",
+    "message": "Gemini 요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.",
+    "request_id": "01a8ffbce49a",
+    "retryable": true
+  }
+}
+```
+
+- `400`: 이미지 형식 또는 입력값 오류
+- `413`: 이미지 개수 또는 용량 제한 초과
+- `422`: URL 등 요청 형식 오류
+- `429`: Gemini 요청 한도 초과
+- `500`: 서버 설정 또는 내부 오류
+- `502`: Gemini 응답 또는 URL Context 오류
+- `504`: Gemini 응답 시간 초과
+
+오류 응답의 `request_id`는 응답 헤더의 `X-Request-ID` 및 서버 로그의 요청 ID와 같습니다. `retryable`이 `true`이면 잠시 후 같은 요청을 다시 시도할 수 있습니다.
 
 ## 테스트
 
