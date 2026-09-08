@@ -26,7 +26,7 @@ function PropertyAnalysisLoadingPage() {
         >
           <ArrowLeft aria-hidden="true" className="size-5" />
         </button>
-        <h1 className="self-center text-center text-sm font-bold">AI 비용 분석</h1>
+        <h1 className="self-center text-center text-sm font-bold">AI 비용 추출</h1>
       </header>
 
       <section className="flex flex-1 flex-col items-center px-6 pt-[22vh] text-center">
@@ -44,11 +44,11 @@ function PropertyAnalysisLoadingPage() {
             />
           ))}
         </div>
-        <h2 className="text-[20px] font-bold tracking-[-0.025em]">매물 비용을 분석하고 있어요</h2>
+        <h2 className="text-[20px] font-bold tracking-[-0.025em]">매물 비용을 추출하고 있어요</h2>
         <p className="mt-3 text-xs leading-5 text-[var(--text-secondary)]">
-          등록한 정보에서 월세와 초기비용을 찾고 있어요.<br />분석이 끝나면 비용 확인 화면으로 이동해요.
+          등록한 정보에서 월세와 초기비용을 찾고 있어요.<br />추출이 끝나면 비용 확인 화면으로 이동해요.
         </p>
-        <div className="mt-7 flex gap-2" aria-label="분석 중">
+        <div className="mt-7 flex gap-2" aria-label="추출 중">
           <span className="size-2 animate-pulse rounded-full bg-[var(--brand)]" />
           <span className="size-2 animate-pulse rounded-full bg-[var(--brand)]/45 [animation-delay:150ms]" />
           <span className="size-2 animate-pulse rounded-full bg-[var(--brand)]/25 [animation-delay:300ms]" />

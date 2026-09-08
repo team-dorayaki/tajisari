@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { AlertCircle, ArrowLeft, Check, ChevronRight, Info, X } from "lucide-react"
+import { AlertCircle, ArrowLeft, Check, ChevronRight, Info, LoaderCircle, X } from "lucide-react"
 import { Controller, useForm, useWatch, type UseFormRegisterReturn } from "react-hook-form"
 import { useNavigate } from "react-router-dom"
 import { z } from "zod"
@@ -285,9 +285,9 @@ function ChoiceButton({ selected, children, onClick }: { selected: boolean; chil
   )
 }
 
-function SheetActions({ applyDisabled = false, onApply, onLater }: { applyDisabled?: boolean; onApply: () => void; onLater: () => void }) {
+function SheetActions({ applyDisabled = false, onApply }: { applyDisabled?: boolean; onApply: () => void }) {
   return (
-    <div className="mt-7 space-y-3">
+    <div className="mt-7">
       <button
         type="button"
         disabled={applyDisabled}
@@ -295,9 +295,6 @@ function SheetActions({ applyDisabled = false, onApply, onLater }: { applyDisabl
         className="h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d9dfe4]"
       >
         확인한 값 적용
-      </button>
-      <button type="button" onClick={onLater} className="h-12 w-full rounded-lg border border-[#dce1e4] text-sm font-bold">
-        나중에 확인하기
       </button>
     </div>
   )
@@ -357,7 +354,7 @@ function VerificationSheet({ item, verification, initialAnswer = "", onClose, on
             </span>
           </label>
           <p className="mt-4 text-xs text-[var(--text-secondary)]">{config.helper}</p>
-          <SheetActions applyDisabled={!isValid} onApply={handleSubmit(({ answer: value }) => onApply(value))} onLater={onClose} />
+          <SheetActions applyDisabled={!isValid} onApply={handleSubmit(({ answer: value }) => onApply(value))} />
         </form>
       </BottomSheet>
     )
@@ -392,16 +389,13 @@ function VerificationSheet({ item, verification, initialAnswer = "", onClose, on
           ))}
         </div>
         {config.helper && <p className="mt-4 text-xs text-[var(--text-secondary)]">{config.helper}</p>}
-        <div className="mt-7 space-y-3">
+        <div className="mt-7">
           <button
             type="submit"
             disabled={!isValid}
             className="h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d9dfe4]"
           >
             {config.apply}
-          </button>
-          <button type="button" onClick={onClose} className="h-12 w-full rounded-lg border border-[#dce1e4] text-sm font-bold">
-            나중에 확인하기
           </button>
         </div>
       </form>
@@ -502,15 +496,49 @@ function PropertyCostsPage() {
   const propertyInfo = usePropertyCostsStore((state) => state.propertyInfo)
   const siteInitialCost = usePropertyCostsStore((state) => state.siteInitialCost)
   const costSections = usePropertyCostsStore((state) => state.costSections)
+  const requiredConfirmations = usePropertyCostsStore((state) => state.requiredConfirmations)
   const updatePropertyInfo = usePropertyCostsStore((state) => state.updatePropertyInfo)
   const updateCostAmounts = usePropertyCostsStore((state) => state.updateCostAmounts)
   const submissionStatus = usePropertyCostsStore((state) => state.submissionStatus)
   const submissionError = usePropertyCostsStore((state) => state.submissionError)
   const clearSubmissionError = usePropertyCostsStore((state) => state.clearSubmissionError)
-  const submitPropertyAndCalculate = usePropertyCostsStore((state) => state.submitPropertyAndCalculate)
-  const pendingCount = costSections.flatMap((section) => section.items)
-    .flatMap((item) => item.verifications)
-    .filter((verification) => verification.status === "PENDING").length
+  const reviewStatus = usePropertyCostsStore((state) => state.reviewStatus)
+  const reviewError = usePropertyCostsStore((state) => state.reviewError)
+  const loadPropertyCosts = usePropertyCostsStore((state) => state.loadPropertyCosts)
+  const submitPropertyAndAnalyze = usePropertyCostsStore((state) => state.submitPropertyAndAnalyze)
+
+  useEffect(() => {
+    if (reviewStatus === "idle") void loadPropertyCosts()
+  }, [loadPropertyCosts, reviewStatus])
+
+  if (reviewStatus === "idle" || reviewStatus === "loading") {
+    return (
+      <main className="min-h-dvh bg-[#f5f6f7]">
+        <CostsHeader title="비용 확인" />
+        <section className="flex min-h-[calc(100dvh-64px)] flex-col items-center justify-center px-6 text-center" aria-live="polite">
+          <span className="size-8 animate-spin rounded-full border-4 border-[var(--brand-soft)] border-t-[var(--brand)]" aria-hidden="true" />
+          <h2 className="mt-5 text-base font-bold">추출한 비용을 불러오고 있어요</h2>
+        </section>
+      </main>
+    )
+  }
+
+  if (reviewStatus === "error") {
+    return (
+      <main className="min-h-dvh bg-[#f5f6f7]">
+        <CostsHeader title="비용 확인" />
+        <section className="flex min-h-[calc(100dvh-64px)] flex-col items-center justify-center px-6 text-center" role="alert">
+          <AlertCircle aria-hidden="true" className="size-9 text-[#ff705d]" />
+          <h2 className="mt-4 text-base font-bold">비용 정보를 불러오지 못했어요</h2>
+          <p className="mt-2 text-xs text-[var(--text-secondary)]">{reviewError}</p>
+          <button type="button" onClick={() => void loadPropertyCosts()} className="mt-6 h-12 min-w-36 rounded-lg bg-[var(--brand)] px-5 text-sm font-bold text-white">
+            다시 시도하기
+          </button>
+        </section>
+      </main>
+    )
+  }
+  const pendingCount = requiredConfirmations.filter((confirmation) => confirmation.status === "PENDING").length
   const confirmedInitialCost = costSections.flatMap((section) => section.items)
     .filter(isIncludedInInitialCost)
     .reduce((sum, item) => sum + (item.amount ?? 0), 0)
@@ -519,12 +547,12 @@ function PropertyCostsPage() {
   const siteBarHeight = Math.max(64, Math.round((siteInitialCost / chartMaximum) * 112))
   const confirmedBarHeight = Math.max(64, Math.round((confirmedInitialCost / chartMaximum) * 112))
   const activeEditSection = costSections.find((section) => section.id === editSheet)
-  const isSubmitting = submissionStatus === "saving" || submissionStatus === "calculating"
+  const isSubmitting = submissionStatus === "saving" || submissionStatus === "analyzing"
   const submitButtonLabel = submissionStatus === "saving"
-    ? "매물 저장 중..."
-    : submissionStatus === "calculating"
-      ? "비용 계산 중..."
-      : "비용 계산하기"
+    ? "분석 준비 중..."
+    : submissionStatus === "analyzing"
+      ? "비용 분석 중..."
+      : "비용 분석하기"
 
   return (
     <main className="min-h-dvh bg-[#f5f6f7]">
@@ -546,9 +574,9 @@ function PropertyCostsPage() {
           <span className="grid size-5 place-items-center rounded-full bg-[var(--brand-soft)]">
             <Check aria-hidden="true" className="size-3" strokeWidth={3} />
           </span>
-          분석 완료
+          추출 완료
         </div>
-        <h2 className="text-lg font-bold">AI 분석 결과를 확인해주세요</h2>
+        <h2 className="text-lg font-bold">AI 추출 결과를 확인해주세요</h2>
         <p className="mt-1 text-xs text-[var(--text-secondary)]">등록한 매물 정보에서 비용 항목을 정리했어요.</p>
       </section>
 
@@ -630,16 +658,23 @@ function PropertyCostsPage() {
         )}
         <button
           type="button"
-          disabled={isSubmitting}
+          disabled={isSubmitting || pendingCount > 0}
+          aria-busy={isSubmitting}
           onClick={() => {
-            void submitPropertyAndCalculate()
+            void submitPropertyAndAnalyze()
               .then((propertyId) => void navigate(`/properties/${propertyId}`, { replace: true }))
               .catch(() => undefined)
           }}
-          className="h-14 w-full rounded-xl bg-[var(--brand)] text-base font-bold text-white disabled:cursor-wait disabled:bg-[#65c5b8]"
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] text-base font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d9dfe4]"
         >
+          {isSubmitting && <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />}
           {submitButtonLabel}
         </button>
+        {isSubmitting && (
+          <p className="mt-3 text-center text-xs text-[var(--text-secondary)]" role="status" aria-live="polite">
+            확인한 비용을 바탕으로 초기비용과 월 주거비를 분석하고 있어요.
+          </p>
+        )}
       </section>
 
       {editSheet === "property" && (
@@ -671,6 +706,7 @@ function RequiredCostsPage() {
   const [activeVerificationId, setActiveVerificationId] = useState<string | null>(null)
   const [selectionOpen, setSelectionOpen] = useState(false)
   const costSections = usePropertyCostsStore((state) => state.costSections)
+  const requiredConfirmations = usePropertyCostsStore((state) => state.requiredConfirmations)
   const draftVerificationAnswers = usePropertyCostsStore((state) => state.draftVerificationAnswers)
   const draftSelectedCostIds = usePropertyCostsStore((state) => state.draftSelectedCostIds)
   const updateDraftVerification = usePropertyCostsStore((state) => state.updateDraftVerification)
@@ -678,11 +714,22 @@ function RequiredCostsPage() {
   const saveReviewDraft = usePropertyCostsStore((state) => state.saveReviewDraft)
   const discardReviewDraft = usePropertyCostsStore((state) => state.discardReviewDraft)
   const allItems = costSections.flatMap((section) => section.items)
-  const verificationTasks = allItems.flatMap((item) =>
-    item.verifications
-      .filter((verification) => verification.status === "PENDING")
-      .map((verification) => ({ item, verification })),
-  )
+  const verificationTasks = requiredConfirmations
+    .filter((confirmation) => confirmation.status === "PENDING")
+    .flatMap((confirmation) => {
+      const item = allItems.find((costItem) => costItem.id === confirmation.costItemId)
+      if (!item) return []
+
+      return [{
+        item,
+        verification: {
+          id: confirmation.confirmationId,
+          type: confirmation.type,
+          status: confirmation.status,
+          answer: confirmation.answer,
+        } satisfies CostVerification,
+      }]
+    })
   const activeTask = verificationTasks.find(({ verification }) => verification.id === activeVerificationId)
   const selectableItems = allItems.filter((item) => item.selectable)
   const savedSelectedIds = selectableItems.filter((item) => item.selected).map((item) => item.id)

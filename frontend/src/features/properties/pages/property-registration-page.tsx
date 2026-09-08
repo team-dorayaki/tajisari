@@ -119,7 +119,7 @@ function PropertyRegistrationPage() {
         </div>
 
         <p className="mt-6 text-xs leading-5 text-[var(--text-secondary)]">
-          두 방식 모두 AI 분석 후 비용을 직접 확인하고 수정할 수 있어요.
+          두 방식 모두 AI 추출 후 비용을 직접 확인하고 수정할 수 있어요.
         </p>
       </section>
     </RegistrationLayout>
@@ -155,7 +155,7 @@ function ImageRegistrationPage() {
           title={images.length > 0 ? "등록한 이미지를 확인해주세요" : "매물 이미지를 등록해주세요"}
           description={
             images.length > 0
-              ? "비용 정보가 잘 보이는지 확인한 뒤 분석을 시작해주세요."
+              ? "비용 정보가 잘 보이는지 확인한 뒤 추출을 시작해주세요."
               : "일본 부동산 앱의 매물 화면을 2~3장 올리면 AI가 비용 항목을 찾아드려요."
           }
         />
@@ -212,7 +212,7 @@ function ImageRegistrationPage() {
         <div className="mt-5">
           {images.length > 0 ? (
             <InfoCard>
-              <strong className="font-bold">등록한 {images.length}장의 이미지를 분석해요</strong>
+              <strong className="font-bold">등록한 {images.length}장의 이미지에서 비용을 추출해요</strong>
               <p className="mt-1 text-[var(--text-secondary)]">
                 월세, 관리비, 보증금, 사례금 등 비용 항목을 추출한 뒤 직접 확인·수정할 수 있어요.
               </p>
@@ -233,7 +233,7 @@ function ImageRegistrationPage() {
           className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:bg-[#dce1e7]"
         >
           {images.length > 0 && <Sparkles aria-hidden="true" className="size-4" />}
-          {images.length > 0 ? "AI로 비용 분석하기" : "이미지를 먼저 등록해주세요"}
+          {images.length > 0 ? "AI로 비용 추출하기" : "이미지를 먼저 등록해주세요"}
         </button>
       </div>
     </RegistrationLayout>
@@ -253,7 +253,7 @@ function UrlRegistrationPage() {
           title={confirmed ? "등록한 URL을 확인해주세요" : "매물 URL을 입력해주세요"}
           description={
             confirmed
-              ? "주소가 맞는지 확인한 뒤 AI 분석을 시작해주세요."
+              ? "주소가 맞는지 확인한 뒤 AI 추출을 시작해주세요."
               : "일본 부동산 사이트의 매물 주소를 붙여넣어주세요."
           }
         />
@@ -301,7 +301,7 @@ function UrlRegistrationPage() {
         <div className="mt-5">
           {confirmed ? (
             <InfoCard>
-              <strong className="font-bold">URL의 매물 정보를 분석해요</strong>
+              <strong className="font-bold">URL의 매물 정보에서 비용을 추출해요</strong>
               <p className="mt-1 text-[var(--text-secondary)]">
                 월세, 관리비, 보증금과 초기비용을 찾아 확인 가능한 항목으로 정리해드려요.
               </p>
@@ -328,7 +328,7 @@ function UrlRegistrationPage() {
           className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:bg-[#dce1e7]"
         >
           {confirmed && <Sparkles aria-hidden="true" className="size-4" />}
-          {confirmed ? "AI로 비용 분석하기" : "URL 확인하기"}
+          {confirmed ? "AI로 비용 추출하기" : "URL 확인하기"}
         </button>
       </div>
     </RegistrationLayout>

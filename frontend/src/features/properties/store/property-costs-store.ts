@@ -1,6 +1,7 @@
 import { create } from "zustand"
 
-import { calculateProperty, saveProperty } from "@/features/properties/api/property-costs-api"
+import { analyzePropertyCosts, fetchPropertyCosts, saveProperty } from "@/features/properties/api/property-costs-api"
+import type { CostTiming, PropertyCostItem, PropertyCostReviewResponse, RequiredCostConfirmation } from "@/features/properties/types/property-costs"
 
 type VerificationType = "AMOUNT" | "OCCURRENCE_TIMING" | "REQUIREDNESS" | "BROKER_CONFIRMATION"
 type VerificationStatus = "PENDING" | "RESOLVED"
@@ -43,21 +44,26 @@ type PropertyInfo = {
   contractMonths: string
 }
 
-type SubmissionStatus = "idle" | "saving" | "calculating" | "saveError" | "calculationError" | "success"
+type SubmissionStatus = "idle" | "saving" | "analyzing" | "saveError" | "analysisError" | "success"
 
 type SubmissionError = {
   id: number
-  stage: "save" | "calculation"
+  stage: "save" | "analysis"
   message: string
 }
+
+type ReviewStatus = "idle" | "loading" | "success" | "error"
 
 type PropertyCostsState = {
   propertyInfo: PropertyInfo
   siteInitialCost: number
   costSections: CostSectionData[]
+  requiredConfirmations: RequiredCostConfirmation[]
   draftVerificationAnswers: Record<string, string>
   draftSelectedCostIds: string[] | null
   submissionStatus: SubmissionStatus
+  reviewStatus: ReviewStatus
+  reviewError: string | null
   savedPropertyId: string | null
   submissionError: SubmissionError | null
   updatePropertyInfo: (propertyInfo: PropertyInfo) => void
@@ -67,89 +73,58 @@ type PropertyCostsState = {
   saveReviewDraft: () => void
   discardReviewDraft: () => void
   clearSubmissionError: () => void
-  submitPropertyAndCalculate: () => Promise<string>
+  loadPropertyCosts: () => Promise<void>
+  submitPropertyAndAnalyze: () => Promise<string>
 }
 
-const mockCostSections: CostSectionData[] = [
-  {
-    id: "base",
-    title: "기본 비용",
-    items: [
-      { id: "rent", label: "월세(家賃)", amount: 78_000, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
-      { id: "management", label: "관리비·공익비", amount: 6_000, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
-      { id: "deposit", label: "시키킨(敷金)", amount: 78_000, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
-      { id: "key-money", label: "레이킨(礼金)", amount: null, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, emptyLabel: "없음", verifications: [] },
-    ],
-  },
-  {
-    id: "move-in",
-    title: "입주 시 추가 비용",
-    showItemCount: true,
-    items: [
-      { id: "prepaid-rent", label: "선불 월세(前家賃)", amount: 84_000, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
-      { id: "brokerage", label: "중개수수료", amount: 85_800, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
-      { id: "guarantor", label: "초기 보증회사료", amount: 42_000, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
-      {
-        id: "key-replacement",
-        label: "열쇠교체비",
-        amount: 22_000,
-        currency: "JPY",
-        calculationPeriod: "INITIAL",
-        originalText: "鍵交換費 22,000円",
-        verifications: [{ id: "verify-key-requiredness", type: "REQUIREDNESS", status: "PENDING", answer: null }],
-      },
-      {
-        id: "fire-insurance",
-        label: "화재보험료",
-        amount: null,
-        currency: "JPY",
-        calculationPeriod: "INITIAL",
-        originalText: "損保 要・金額記載なし",
-        verifications: [{ id: "verify-fire-amount", type: "AMOUNT", status: "PENDING", answer: null }],
-      },
-      { id: "antibacterial", label: "항균·소독비", amount: 18_000, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, selectable: true, selected: true, verifications: [] },
-      {
-        id: "paperwork",
-        label: "서류작성비",
-        amount: 11_000,
-        currency: "JPY",
-        calculationPeriod: "INITIAL",
-        originalText: "書類作成費 11,000円",
-        verifications: [{ id: "verify-paperwork-broker", type: "BROKER_CONFIRMATION", status: "PENDING", answer: null }],
-      },
-    ],
-  },
-  {
-    id: "monthly",
-    title: "매월 추가 비용",
-    showItemCount: true,
-    items: [
-      { id: "monthly-guarantee", label: "월 보증료", amount: 1_200, currency: "JPY", calculationPeriod: "MONTHLY", originalText: null, monthly: true, verifications: [] },
-      { id: "water", label: "수도사용료", amount: 3_000, currency: "JPY", calculationPeriod: "MONTHLY", originalText: null, monthly: true, verifications: [] },
-      { id: "support", label: "24시간 서포트", amount: 880, currency: "JPY", calculationPeriod: "MONTHLY", originalText: null, monthly: true, selectable: true, selected: true, verifications: [] },
-      { id: "internet", label: "인터넷 이용료", amount: null, currency: "JPY", calculationPeriod: "MONTHLY", originalText: null, monthly: true, selectable: true, selected: false, verifications: [] },
-    ],
-  },
-  {
-    id: "renewal-exit",
-    title: "갱신·퇴거 비용",
-    showItemCount: true,
-    items: [
-      { id: "renewal-guarantee", label: "보증 갱신료", amount: 10_000, currency: "JPY", calculationPeriod: "FUTURE", originalText: null, verifications: [] },
-      { id: "contract-renewal", label: "계약 갱신료", amount: 78_000, currency: "JPY", calculationPeriod: "FUTURE", originalText: null, verifications: [] },
-      {
-        id: "cleaning",
-        label: "퇴거 청소비",
-        amount: 33_000,
-        currency: "JPY",
-        calculationPeriod: "FUTURE",
-        originalText: "クリーニング費 33,000円",
-        verifications: [{ id: "verify-cleaning-timing", type: "OCCURRENCE_TIMING", status: "PENDING", answer: null }],
-      },
-      { id: "early-cancellation", label: "단기해약 위약금", amount: 78_000, currency: "JPY", calculationPeriod: "FUTURE", originalText: null, description: "1년 미만 퇴거 시", conditional: true, verifications: [] },
-    ],
-  },
-]
+function toCalculationPeriod(timing: CostTiming): CalculationPeriod {
+  if (timing === "MONTHLY") return "MONTHLY"
+  if (timing === "INITIAL") return "INITIAL"
+  return "FUTURE"
+}
+
+function toDisplayCostItem(item: PropertyCostItem, confirmations: RequiredCostConfirmation[]): CostItem {
+  return {
+    id: item.costItemId,
+    label: item.displayName,
+    amount: item.amount,
+    currency: "JPY",
+    calculationPeriod: toCalculationPeriod(item.timing),
+    originalText: item.rawValue,
+    description: item.timing === "CONDITIONAL" ? "1년 미만 퇴거 시" : undefined,
+    emptyLabel: item.amount === null ? "미표기" : undefined,
+    monthly: item.timing === "MONTHLY",
+    selectable: item.obligationStatus === "OPTIONAL",
+    selected: item.obligationStatus === "OPTIONAL" ? item.costItemId !== "internet" : undefined,
+    conditional: item.timing === "CONDITIONAL",
+    verifications: confirmations
+      .filter((confirmation) => confirmation.costItemId === item.costItemId)
+      .map((confirmation) => ({
+        id: confirmation.confirmationId,
+        type: confirmation.type,
+        status: confirmation.status,
+        answer: confirmation.answer,
+      })),
+  }
+}
+
+function toCostSections(response: PropertyCostReviewResponse, confirmations: RequiredCostConfirmation[]): CostSectionData[] {
+  const { property, costItems } = response
+  const fixedItems: CostItem[] = [
+    { id: "rent", label: "월세(家賃)", amount: property.rent, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
+    { id: "management", label: "관리비·공익비", amount: property.managementFee, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
+    { id: "deposit", label: "시키킨(敷金)", amount: property.deposit, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
+    { id: "key-money", label: "레이킨(礼金)", amount: property.keyMoney === 0 ? null : property.keyMoney, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, emptyLabel: property.keyMoney === 0 ? "없음" : undefined, verifications: [] },
+  ]
+  const displayItems = costItems.map((item) => toDisplayCostItem(item, confirmations))
+
+  return [
+    { id: "base", title: "기본 비용", items: fixedItems },
+    { id: "move-in", title: "입주 시 추가 비용", showItemCount: true, items: displayItems.filter((item) => item.calculationPeriod === "INITIAL") },
+    { id: "monthly", title: "매월 추가 비용", showItemCount: true, items: displayItems.filter((item) => item.calculationPeriod === "MONTHLY") },
+    { id: "renewal-exit", title: "갱신·퇴거 비용", showItemCount: true, items: displayItems.filter((item) => item.calculationPeriod === "FUTURE") },
+  ]
+}
 
 const timingPeriod: Record<string, CalculationPeriod> = {
   MOVE_IN: "INITIAL",
@@ -159,12 +134,15 @@ const timingPeriod: Record<string, CalculationPeriod> = {
 }
 
 const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
-  propertyInfo: { name: "신주쿠 원룸 A", area: "도쿄도 신주쿠", moveInDate: "2026-10-15", contractMonths: "24" },
-  siteInitialCost: 320_000,
-  costSections: mockCostSections,
+  propertyInfo: { name: "", area: "", moveInDate: "", contractMonths: "" },
+  siteInitialCost: 0,
+  costSections: [],
+  requiredConfirmations: [],
   draftVerificationAnswers: {},
   draftSelectedCostIds: null,
   submissionStatus: "idle",
+  reviewStatus: "idle",
+  reviewError: null,
   savedPropertyId: null,
   submissionError: null,
   updatePropertyInfo: (propertyInfo) =>
@@ -210,6 +188,10 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
           }
         }),
       })),
+      requiredConfirmations: state.requiredConfirmations.map((confirmation) => {
+        const answer = state.draftVerificationAnswers[confirmation.confirmationId]
+        return answer === undefined ? confirmation : { ...confirmation, status: "RESOLVED" as const, answer }
+      }),
       draftVerificationAnswers: {},
       draftSelectedCostIds: null,
       submissionStatus: "idle",
@@ -218,7 +200,32 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
     })),
   discardReviewDraft: () => set({ draftVerificationAnswers: {}, draftSelectedCostIds: null }),
   clearSubmissionError: () => set({ submissionError: null }),
-  submitPropertyAndCalculate: async () => {
+  loadPropertyCosts: async () => {
+    if (get().reviewStatus === "loading") return
+    set({ reviewStatus: "loading", reviewError: null })
+
+    try {
+      const response = await fetchPropertyCosts()
+      const { requiredConfirmations } = response
+      set({
+        propertyInfo: {
+          name: response.property.name,
+          area: response.property.area,
+          moveInDate: response.property.availableFrom ?? "",
+          contractMonths: response.property.contractPeriodMonths?.toString() ?? "",
+        },
+        siteInitialCost: response.property.listedInitialCostTotal ?? 0,
+        costSections: toCostSections(response, requiredConfirmations),
+        requiredConfirmations,
+        savedPropertyId: response.property.propertyId,
+        reviewStatus: "success",
+        reviewError: null,
+      })
+    } catch {
+      set({ reviewStatus: "error", reviewError: "비용 정보를 불러오지 못했어요. 다시 시도해주세요." })
+    }
+  },
+  submitPropertyAndAnalyze: async () => {
     let propertyId = get().savedPropertyId
 
     if (!propertyId) {
@@ -242,19 +249,19 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
       }
     }
 
-    set({ submissionStatus: "calculating", submissionError: null })
+    set({ submissionStatus: "analyzing", submissionError: null })
 
     try {
-      await calculateProperty(propertyId)
+      await analyzePropertyCosts(propertyId)
       set({ submissionStatus: "success" })
       return propertyId
     } catch (error) {
       set((state) => ({
-        submissionStatus: "calculationError",
+        submissionStatus: "analysisError",
         submissionError: {
           id: (state.submissionError?.id ?? 0) + 1,
-          stage: "calculation",
-          message: "비용 계산에 실패했어요. 다시 시도해주세요.",
+          stage: "analysis",
+          message: "비용 분석에 실패했어요. 다시 시도해주세요.",
         },
       }))
       throw error
