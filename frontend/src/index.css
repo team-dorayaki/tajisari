@@ -7,7 +7,7 @@
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Inter Variable', sans-serif;
+    --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", "Inter Variable", sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,8 +49,14 @@
 }
 
 :root {
+    color-scheme: light;
     --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    --foreground: #15171c;
+    --app-canvas: #ffffff;
+    --app-surface: #ffffff;
+    --brand: #00ad96;
+    --brand-soft: #e1f7f3;
+    --text-secondary: #818894;
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
@@ -120,11 +126,137 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
-  body {
-    @apply bg-background text-foreground;
+    box-sizing: border-box;
     }
   html {
     @apply font-sans;
+    font-size: 16px;
+    background: var(--app-canvas);
+    -webkit-text-size-adjust: 100%;
     }
+  body {
+    @apply m-0 min-w-0 bg-background text-foreground antialiased;
+    min-height: 100dvh;
+    }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    }
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+    }
+  #root {
+    min-height: 100dvh;
+    }
+}
+
+@media (min-width: 431px) {
+  body {
+    background:
+      radial-gradient(
+        ellipse 560px 92% at center,
+        rgb(0 173 150 / 11%) 0%,
+        rgb(0 173 150 / 4%) 36%,
+        transparent 70%
+      ),
+      var(--app-canvas);
+  }
+
+  .mobile-app-shell {
+    position: relative;
+    box-shadow:
+      0 0 0 1px rgb(0 173 150 / 8%),
+      0 0 42px rgb(0 173 150 / 13%),
+      0 0 120px rgb(0 173 150 / 8%);
+  }
+}
+
+@keyframes property-ai-loading-frame {
+  0%, 19.999% { opacity: 1; }
+  20%, 100% { opacity: 0; }
+}
+
+@keyframes bottom-sheet-backdrop-in {
+  from { background-color: rgb(0 0 0 / 0%); }
+  to { background-color: rgb(0 0 0 / 30%); }
+}
+
+@keyframes bottom-sheet-panel-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.bottom-sheet-backdrop {
+  animation: bottom-sheet-backdrop-in 180ms ease-out;
+}
+
+.bottom-sheet-panel {
+  animation: bottom-sheet-panel-in 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.property-ai-loading-sprite {
+  position: relative;
+  width: 152px;
+  height: 162px;
+  margin-bottom: 28px;
+}
+
+.property-ai-loading-frame {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 162px;
+  opacity: 0;
+  background-repeat: no-repeat;
+  background-size: 760px 162px;
+  transform: translateX(-50%);
+  animation: property-ai-loading-frame 4s linear infinite;
+}
+
+.property-ai-loading-frame:nth-child(1) {
+  width: 140px;
+  background-position: -12px 0;
+}
+
+.property-ai-loading-frame:nth-child(2) {
+  width: 104px;
+  background-position: -159px 0;
+  animation-delay: 0.8s;
+}
+
+.property-ai-loading-frame:nth-child(3) {
+  width: 151px;
+  background-position: -286px 0;
+  animation-delay: 1.6s;
+}
+
+.property-ai-loading-frame:nth-child(4) {
+  width: 139px;
+  background-position: -454px 0;
+  animation-delay: 2.4s;
+}
+
+.property-ai-loading-frame:nth-child(5) {
+  width: 126px;
+  background-position: -623px 0;
+  animation-delay: 3.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bottom-sheet-backdrop,
+  .bottom-sheet-panel {
+    animation: none;
+  }
+
+  .property-ai-loading-frame {
+    opacity: 0;
+    animation: none;
+  }
+
+  .property-ai-loading-frame:nth-child(2) {
+    opacity: 1;
+  }
 }
