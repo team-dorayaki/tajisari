@@ -19,9 +19,10 @@ function CurrencyField({ label, value, currency, onChange }: CurrencyFieldProps)
         <input
           type="text"
           inputMode="numeric"
-          value={value.toLocaleString("ko-KR")}
+          value={value ? value.toLocaleString("ko-KR") : ""}
           onChange={(event) => onChange(parseAmount(event.target.value))}
-          className="min-w-0 flex-1 bg-transparent text-[17px] font-bold tabular-nums outline-none"
+          placeholder="금액 입력"
+          className="min-w-0 flex-1 bg-transparent text-[17px] font-bold tabular-nums outline-none placeholder:font-normal placeholder:text-[#b7bdc4]"
           aria-label={`${label ?? "금액"} ${currency}`}
         />
         <span className="text-xs font-semibold text-[var(--text-secondary)]">{currency}</span>
