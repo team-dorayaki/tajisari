@@ -32,7 +32,7 @@ public class SettlementPlanService {
         validateRequest(request);
 
         // 비용 구분·통화별 합계 계산
-        CurrencyTotalsResponse initialCostTotals = calculateTotals(request.getAdditionalInitialCosts());
+        CurrencyTotalsResponse additionalInitialCostTotals = calculateTotals(request.getAdditionalInitialCosts());
         CurrencyTotalsResponse monthlyLivingCostTotals = calculateTotals(request.getMonthlyLivingCosts());
 
         // 정착 계획과 비용 항목 생성
@@ -42,12 +42,11 @@ public class SettlementPlanService {
 
         SettlementPlan savedPlan = settlementPlanRepository.save(settlementPlan);
         return new SettlementPlanCreateResponse(
-                savedPlan.getId(), initialCostTotals, monthlyLivingCostTotals, "SAVED");
+                savedPlan.getId(), additionalInitialCostTotals, monthlyLivingCostTotals, "SAVED");
     }
 
     private void validateRequest(SettlementPlanCreateRequest request) {
         validateMoveInDate(request.getMoveInDate());
-        validateNoIncomePeriod(request.getNoIncomePeriodMonths(), request.getPlannedStayMonths());
         validateEmergencyReserve(request);
         validateCostItems(request.getAdditionalInitialCosts(), CostCategory.INITIAL);
         validateCostItems(request.getMonthlyLivingCosts(), CostCategory.MONTHLY);
@@ -59,15 +58,9 @@ public class SettlementPlanService {
         }
     }
 
-    private void validateNoIncomePeriod(int noIncomePeriodMonths, int plannedStayMonths) {
-        if (noIncomePeriodMonths > plannedStayMonths) {
-            throw new BusinessException(ErrorCode.SETTLEMENT_PLAN_INVALID_NO_INCOME_PERIOD);
-        }
-    }
-
     private void validateEmergencyReserve(SettlementPlanCreateRequest request) {
-        if (request.getEmergencyReserve().getKrw() > request.getAvailableFunds().getKrw()
-                || request.getEmergencyReserve().getJpy() > request.getAvailableFunds().getJpy()) {
+        if (request.getEmergencyReserve().getKrw() > request.getPreparedFunds().getKrw()
+                || request.getEmergencyReserve().getJpy() > request.getPreparedFunds().getJpy()) {
             throw new BusinessException(ErrorCode.SETTLEMENT_PLAN_RESERVE_EXCEEDS_FUNDS);
         }
     }
@@ -126,11 +119,11 @@ public class SettlementPlanService {
         return new SettlementPlan(
                 request.getMoveInDate(),
                 request.getPlannedStayMonths(),
-                request.getNoIncomePeriodMonths(),
-                request.getAvailableFunds().getKrw(),
-                request.getAvailableFunds().getJpy(),
+                request.getPreparedFunds().getKrw(),
+                request.getPreparedFunds().getJpy(),
                 request.getEmergencyReserve().getKrw(),
-                request.getEmergencyReserve().getJpy());
+                request.getEmergencyReserve().getJpy(),
+                request.getMonthlyLivingCostInputMethod());
     }
 
     private void addCostItems(

@@ -4,6 +4,7 @@ import com.tajisali.common.config.JacksonConfig;
 import com.tajisali.common.response.ApiResponse;
 import com.tajisali.settlement.domain.CostType;
 import com.tajisali.settlement.domain.CurrencyCode;
+import com.tajisali.settlement.domain.MonthlyLivingCostInputMethod;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -11,6 +12,8 @@ import jakarta.validation.ValidatorFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.json.JsonTest;
 import org.springframework.context.annotation.Import;
@@ -53,6 +56,7 @@ class SettlementPlanCreateRequestTest {
         assertThat(request.getMoveInDate()).isEqualTo(LocalDate.of(2026, 10, 15));
         assertThat(request.getAdditionalInitialCosts()).hasSize(1);
         assertThat(request.getMonthlyLivingCosts()).hasSize(1);
+        assertThat(request.getMonthlyLivingCostInputMethod()).isEqualTo(MonthlyLivingCostInputMethod.DEFAULT);
     }
 
     @Test
@@ -60,19 +64,19 @@ class SettlementPlanCreateRequestTest {
         var request = new SettlementPlanCreateRequest();
 
         assertThat(propertiesOf(validator.validate(request))).contains(
-                "moveInDate", "plannedStayMonths", "noIncomePeriodMonths", "availableFunds",
-                "emergencyReserve", "additionalInitialCosts", "monthlyLivingCosts"
+                "moveInDate", "plannedStayMonths", "preparedFunds", "emergencyReserve",
+                "additionalInitialCosts", "monthlyLivingCosts", "monthlyLivingCostInputMethod"
         );
     }
 
     @Test
     void 중첩_금액이_null이거나_음수이면_검증에_실패한다() {
         var request = validRequest();
-        request.getAvailableFunds().setKrw(null);
+        request.getPreparedFunds().setKrw(null);
         request.getEmergencyReserve().setJpy(-1L);
 
         assertThat(propertiesOf(validator.validate(request)))
-                .contains("availableFunds.krw", "emergencyReserve.jpy");
+                .contains("preparedFunds.krw", "emergencyReserve.jpy");
     }
 
     @Test
@@ -91,14 +95,6 @@ class SettlementPlanCreateRequestTest {
         assertThat(propertiesOf(validator.validate(request))).contains(
                 "monthlyLivingCosts[0].type", "monthlyLivingCosts[0].currency"
         );
-    }
-
-    @Test
-    void 무소득_예상기간_음수는_검증에_실패한다() {
-        var request = validRequest();
-        request.setNoIncomePeriodMonths(-1);
-
-        assertThat(propertiesOf(validator.validate(request))).contains("noIncomePeriodMonths");
     }
 
     @Test
@@ -145,7 +141,7 @@ class SettlementPlanCreateRequestTest {
     @Test
     void 금액_0원과_빈_비용_목록은_허용한다() {
         var request = validRequest();
-        request.setAvailableFunds(new CurrencyAmountsRequest(0L, 0L));
+        request.setPreparedFunds(new CurrencyAmountsRequest(0L, 0L));
         request.setEmergencyReserve(new CurrencyAmountsRequest(0L, 0L));
         request.setAdditionalInitialCosts(List.of());
         request.setMonthlyLivingCosts(List.of());
@@ -167,6 +163,26 @@ class SettlementPlanCreateRequestTest {
         request.setMonthlyLivingCosts(List.of(item(), item(), item(), item(), item(), item(), item()));
 
         assertThat(propertiesOf(validator.validate(request))).contains("monthlyLivingCosts");
+    }
+
+    @Test
+    void 월_생활비_입력_방식이_null이면_검증에_실패한다() {
+        var request = validRequest();
+        request.setMonthlyLivingCostInputMethod(null);
+
+        assertThat(propertiesOf(validator.validate(request))).contains("monthlyLivingCostInputMethod");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"DIRECT", "DEFAULT"})
+    void 월_생활비_입력_방식의_허용값은_역직렬화되고_검증을_통과한다(String inputMethod) throws Exception {
+        var request = mapper.readValue(
+                validRequestJson().replace("\"DEFAULT\"", "\"" + inputMethod + "\""),
+                SettlementPlanCreateRequest.class);
+
+        assertThat(validator.validate(request)).isEmpty();
+        assertThat(request.getMonthlyLivingCostInputMethod())
+                .isEqualTo(MonthlyLivingCostInputMethod.valueOf(inputMethod));
     }
 
     @Test
@@ -246,7 +262,8 @@ class SettlementPlanCreateRequestTest {
 
         assertThat(json.path("success").asBoolean()).isTrue();
         assertThat(json.path("data").path("planId").asLong()).isEqualTo(1L);
-        assertThat(json.path("data").path("initialCostTotals").path("jpy").asLong()).isEqualTo(62000L);
+        assertThat(json.path("data").path("additionalInitialCostTotals").path("jpy").asLong())
+                .isEqualTo(62000L);
         assertThat(json.path("data").path("monthlyLivingCostTotals").path("jpy").asLong()).isEqualTo(115000L);
         assertThat(json.path("data").path("status").asString()).isEqualTo("SAVED");
         assertThat(json.path("error").isNull()).isTrue();
@@ -260,11 +277,11 @@ class SettlementPlanCreateRequestTest {
         return new SettlementPlanCreateRequest(
                 LocalDate.of(2026, 10, 15),
                 12,
-                3,
                 new CurrencyAmountsRequest(8_000_000L, 100_000L),
                 new CurrencyAmountsRequest(1_000_000L, 0L),
                 List.of(item()),
-                List.of(new SettlementPlanCostItemRequest(CostType.FOOD, 40_000L, CurrencyCode.JPY))
+                List.of(new SettlementPlanCostItemRequest(CostType.FOOD, 40_000L, CurrencyCode.JPY)),
+                MonthlyLivingCostInputMethod.DEFAULT
         );
     }
 
@@ -277,15 +294,15 @@ class SettlementPlanCreateRequestTest {
                 {
                   "moveInDate": "2026-10-15",
                   "plannedStayMonths": 12,
-                  "noIncomePeriodMonths": 3,
-                  "availableFunds": {"krw": 8000000, "jpy": 100000},
+                  "preparedFunds": {"krw": 8000000, "jpy": 100000},
                   "emergencyReserve": {"krw": 1000000, "jpy": 0},
                   "additionalInitialCosts": [
                     {"type": "AIRFARE", "amount": 40000, "currency": "JPY"}
                   ],
                   "monthlyLivingCosts": [
                     {"type": "FOOD", "amount": 40000, "currency": "JPY"}
-                  ]
+                  ],
+                  "monthlyLivingCostInputMethod": "DEFAULT"
                 }
                 """;
     }

@@ -55,7 +55,7 @@ class SettlementPlanServiceTest {
         var response = settlementPlanService.create(request);
 
         assertThat(response.getPlanId()).isEqualTo(1L);
-        assertThat(response.getInitialCostTotals().getJpy()).isEqualTo(62_000L);
+        assertThat(response.getAdditionalInitialCostTotals().getJpy()).isEqualTo(62_000L);
         assertThat(response.getMonthlyLivingCostTotals().getJpy()).isEqualTo(115_000L);
         assertThat(response.getStatus()).isEqualTo("SAVED");
 
@@ -63,6 +63,9 @@ class SettlementPlanServiceTest {
         verify(settlementPlanRepository).save(planCaptor.capture());
         SettlementPlan savedPlan = planCaptor.getValue();
         assertThat(savedPlan.getMoveInDate()).isEqualTo(request.getMoveInDate());
+        assertThat(savedPlan.getPreparedFundsKrw()).isEqualTo(1_000_000L);
+        assertThat(savedPlan.getPreparedFundsJpy()).isEqualTo(100_000L);
+        assertThat(savedPlan.getMonthlyLivingCostInputMethod()).isEqualTo(MonthlyLivingCostInputMethod.DEFAULT);
         assertThat(savedPlan.getCostItems()).hasSize(8);
         assertThat(savedPlan.getCostItems().getFirst())
                 .extracting(SettlementPlanCostItem::getCostCategory,
@@ -90,8 +93,8 @@ class SettlementPlanServiceTest {
 
         var response = settlementPlanService.create(request);
 
-        assertThat(response.getInitialCostTotals().getKrw()).isEqualTo(1_000L);
-        assertThat(response.getInitialCostTotals().getJpy()).isEqualTo(2_000L);
+        assertThat(response.getAdditionalInitialCostTotals().getKrw()).isEqualTo(1_000L);
+        assertThat(response.getAdditionalInitialCostTotals().getJpy()).isEqualTo(2_000L);
         assertThat(response.getMonthlyLivingCostTotals().getKrw()).isEqualTo(3_000L);
         assertThat(response.getMonthlyLivingCostTotals().getJpy()).isEqualTo(4_000L);
     }
@@ -104,8 +107,8 @@ class SettlementPlanServiceTest {
 
         var response = settlementPlanService.create(request);
 
-        assertThat(response.getInitialCostTotals().getKrw()).isZero();
-        assertThat(response.getInitialCostTotals().getJpy()).isZero();
+        assertThat(response.getAdditionalInitialCostTotals().getKrw()).isZero();
+        assertThat(response.getAdditionalInitialCostTotals().getJpy()).isZero();
         assertThat(response.getMonthlyLivingCostTotals().getKrw()).isZero();
         assertThat(response.getMonthlyLivingCostTotals().getJpy()).isZero();
 
@@ -141,14 +144,6 @@ class SettlementPlanServiceTest {
 
         assertThat(response.getPlanId()).isEqualTo(1L);
         verify(settlementPlanRepository).save(any(SettlementPlan.class));
-    }
-
-    @Test
-    void 무소득_예상기간이_체류기간을_초과하면_거부한다() {
-        SettlementPlanCreateRequest request = request(List.of(), List.of());
-        request.setNoIncomePeriodMonths(request.getPlannedStayMonths() + 1);
-
-        assertErrorCode(request, ErrorCode.SETTLEMENT_PLAN_INVALID_NO_INCOME_PERIOD);
     }
 
     @Test
@@ -222,11 +217,11 @@ class SettlementPlanServiceTest {
         return new SettlementPlanCreateRequest(
                 LocalDate.now(KOREA_ZONE_ID).plusDays(1),
                 12,
-                3,
                 new CurrencyAmountsRequest(1_000_000L, 100_000L),
                 new CurrencyAmountsRequest(100_000L, 10_000L),
                 initialCosts,
-                monthlyCosts);
+                monthlyCosts,
+                MonthlyLivingCostInputMethod.DEFAULT);
     }
 
     private SettlementPlanCostItemRequest cost(CostType type, long amount, CurrencyCode currency) {
