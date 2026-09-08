@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { Check } from "lucide-react"
 import { useNavigate, useParams } from "react-router-dom"
 
@@ -66,23 +66,20 @@ function MoveInDateStep() {
         description="입주 예정일을 기준으로 필요한 준비기간을 계산해요."
       />
 
-      <label className="relative mt-6 block cursor-pointer rounded-xl bg-white px-4 pt-4 pb-5 shadow-[0_1px_2px_rgb(15_23_42/0.04)] outline-none focus-within:ring-2 focus-within:ring-[var(--brand)]/25">
+      <label className="mt-6 block rounded-xl bg-white px-4 pt-4 pb-5 shadow-[0_1px_2px_rgb(15_23_42/0.04)] outline-none focus-within:ring-2 focus-within:ring-[var(--brand)]/25">
         <span className="block text-xs font-bold text-[var(--brand)]">입주 예정일</span>
         <span className="mt-3 flex items-end justify-between gap-3 border-b-2 border-[var(--brand)] pb-3">
-          <span className="text-[22px] leading-none font-bold tracking-[-0.025em] tabular-nums">
-            {display.date}
-          </span>
+          <input
+            type="date"
+            value={moveInDate}
+            onChange={(event) => setMoveInDate(event.target.value)}
+            aria-label="입주 예정일"
+            className="min-w-0 flex-1 appearance-none bg-transparent text-[22px] leading-none font-bold tracking-[-0.025em] tabular-nums outline-none [&::-webkit-calendar-picker-indicator]:hidden"
+          />
           <span className="shrink-0 text-sm font-semibold text-[var(--text-secondary)]">
             {display.weekday}
           </span>
         </span>
-        <input
-          type="date"
-          value={moveInDate}
-          onChange={(event) => setMoveInDate(event.target.value)}
-          aria-label="입주 예정일"
-          className="absolute inset-0 size-full cursor-pointer opacity-0"
-        />
       </label>
 
       <p className="mt-6 text-xs leading-5 text-[var(--text-secondary)]">
@@ -95,6 +92,31 @@ function MoveInDateStep() {
 function StayDurationStep() {
   const stayMonths = useSettlementPlanStore((state) => state.stayMonths)
   const setStayMonths = useSettlementPlanStore((state) => state.setStayMonths)
+  const [stayMonthsInput, setStayMonthsInput] = useState<string | null>(null)
+
+  const handleStayMonthsChange = (value: string) => {
+    if (!/^\d{0,2}$/.test(value)) return
+
+    setStayMonthsInput(value)
+    const months = Number(value)
+
+    if (months >= 1 && months <= 24) {
+      setStayMonths(months)
+    }
+  }
+
+  const commitStayMonths = () => {
+    if (stayMonthsInput === null) return
+
+    if (stayMonthsInput === "") {
+      setStayMonthsInput(null)
+      return
+    }
+
+    const months = Math.min(24, Math.max(1, Number(stayMonthsInput)))
+    setStayMonths(months)
+    setStayMonthsInput(null)
+  }
 
   return (
     <>
@@ -105,7 +127,19 @@ function StayDurationStep() {
       <FormCard>
         <p className="text-xs font-bold text-[var(--brand)]">예상 체류기간</p>
         <div className="mt-3 flex items-end gap-3 border-b-2 border-[var(--brand)] pb-3">
-          <span className="flex-1 text-[22px] leading-none font-bold tabular-nums">{stayMonths}</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={stayMonthsInput ?? String(stayMonths)}
+            onFocus={() => setStayMonthsInput(String(stayMonths))}
+            onChange={(event) => handleStayMonthsChange(event.target.value)}
+            onBlur={commitStayMonths}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur()
+            }}
+            aria-label="예상 체류기간(개월)"
+            className="min-w-0 flex-1 bg-transparent text-[22px] leading-none font-bold tabular-nums outline-none"
+          />
           <span className="text-sm font-semibold text-[var(--text-secondary)]">개월</span>
         </div>
       </FormCard>
