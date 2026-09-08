@@ -1,11 +1,39 @@
 import { useState, type ReactNode } from "react"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { AlertCircle, ArrowLeft, Check, ChevronRight, Info } from "lucide-react"
+import { Controller, useForm, useWatch, type UseFormRegisterReturn } from "react-hook-form"
 import { useNavigate } from "react-router-dom"
+import { z } from "zod"
 
 import { BrandInsightCard } from "@/components/ui/brand-insight-card"
 import { usePropertyCostsStore } from "@/features/properties/store/property-costs-store"
 import type { CostItem, CostSectionData, CostVerification, PropertyInfo, VerificationType } from "@/features/properties/store/property-costs-store"
 import { cn } from "@/lib/utils"
+
+const propertyInfoSchema = z.object({
+  name: z.string().trim().min(1, "매물명을 입력해주세요."),
+  area: z.string().trim().min(1, "지역을 입력해주세요."),
+  moveInDate: z.string().min(1, "입주 가능일을 선택해주세요."),
+  contractMonths: z.string().regex(/^\d+$/, "계약기간을 숫자로 입력해주세요."),
+})
+
+const costAmountsSchema = z.object({
+  amounts: z.record(z.string(), z.string().regex(/^\d*$/, "금액은 숫자로 입력해주세요.")),
+})
+
+const amountVerificationSchema = z.object({
+  answer: z.string().regex(/^\d+$/, "금액을 입력해주세요.").refine((value) => Number(value) > 0, "0보다 큰 금액을 입력해주세요."),
+})
+
+const choiceVerificationSchema = z.object({
+  answer: z.string().min(1, "확인한 값을 선택해주세요."),
+})
+
+const selectionCostsSchema = z.object({ selectedIds: z.array(z.string()) })
+
+type CostAmountsFormValues = z.infer<typeof costAmountsSchema>
+type VerificationFormValues = z.infer<typeof choiceVerificationSchema>
+type SelectionCostsFormValues = z.infer<typeof selectionCostsSchema>
 
 function CostsHeader({ title, onBack }: { title: string; onBack?: () => void }) {
   const navigate = useNavigate()
@@ -88,104 +116,133 @@ function BottomSheet({ children, onClose }: { children: ReactNode; onClose: () =
 }
 
 function PropertyInfoSheet({ initialValues, onApply, onClose }: { initialValues: PropertyInfo; onApply: (values: PropertyInfo) => void; onClose: () => void }) {
-  const [values, setValues] = useState(initialValues)
-  const isComplete = Object.values(values).every((value) => value.trim().length > 0)
+  const {
+    control,
+    formState: { errors, isValid },
+    handleSubmit,
+    register,
+  } = useForm<PropertyInfo>({
+    resolver: zodResolver(propertyInfoSchema),
+    defaultValues: initialValues,
+    mode: "onChange",
+  })
 
   return (
     <BottomSheet onClose={onClose}>
-      <h2 className="text-lg font-bold">매물 기본정보 수정</h2>
-      <p className="mt-1 text-xs text-[var(--text-secondary)]">분석에 사용할 매물 정보를 확인해주세요.</p>
-      <div className="mt-5 space-y-4">
-        <SheetTextField label="매물명" value={values.name} onChange={(value) => setValues((current) => ({ ...current, name: value }))} />
-        <SheetTextField label="지역" value={values.area} onChange={(value) => setValues((current) => ({ ...current, area: value }))} />
-        <label className="block">
-          <span className="text-xs font-bold">입주 가능일</span>
-          <input
-            type="date"
-            value={values.moveInDate}
-            onChange={(event) => setValues((current) => ({ ...current, moveInDate: event.target.value }))}
-            className="mt-2 h-12 w-full rounded-lg border border-[#dce1e4] bg-white px-3 text-sm outline-none focus:border-[var(--brand)]"
-          />
-        </label>
-        <label className="block">
-          <span className="text-xs font-bold">계약기간</span>
-          <span className="mt-2 flex h-12 items-center rounded-lg border border-[#dce1e4] px-3 focus-within:border-[var(--brand)]">
+      <form onSubmit={handleSubmit(onApply)} noValidate>
+        <h2 className="text-lg font-bold">매물 기본정보 수정</h2>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">분석에 사용할 매물 정보를 확인해주세요.</p>
+        <div className="mt-5 space-y-4">
+          <SheetTextField label="매물명" error={errors.name?.message} registration={register("name")} />
+          <SheetTextField label="지역" error={errors.area?.message} registration={register("area")} />
+          <label className="block">
+            <span className="text-xs font-bold">입주 가능일</span>
             <input
-              type="text"
-              inputMode="numeric"
-              value={values.contractMonths}
-              onChange={(event) => setValues((current) => ({ ...current, contractMonths: event.target.value.replace(/\D/g, "") }))}
-              className="min-w-0 flex-1 bg-transparent text-sm tabular-nums outline-none"
+              type="date"
+              {...register("moveInDate")}
+              className="mt-2 h-12 w-full rounded-lg border border-[#dce1e4] bg-white px-3 text-sm outline-none focus:border-[var(--brand)]"
             />
-            <span className="text-xs text-[var(--text-secondary)]">개월</span>
-          </span>
-        </label>
-      </div>
-      <button
-        type="button"
-        disabled={!isComplete}
-        onClick={() => onApply(values)}
-        className="mt-7 h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d9dfe4]"
-      >
-        수정 내용 적용
-      </button>
+            {errors.moveInDate && <span className="mt-1 block text-[10px] text-[#ff705d]">{errors.moveInDate.message}</span>}
+          </label>
+          <label className="block">
+            <span className="text-xs font-bold">계약기간</span>
+            <span className="mt-2 flex h-12 items-center rounded-lg border border-[#dce1e4] px-3 focus-within:border-[var(--brand)]">
+              <Controller
+                name="contractMonths"
+                control={control}
+                render={({ field }) => (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={field.value}
+                    onBlur={field.onBlur}
+                    onChange={(event) => field.onChange(event.target.value.replace(/\D/g, ""))}
+                    ref={field.ref}
+                    className="min-w-0 flex-1 bg-transparent text-sm tabular-nums outline-none"
+                  />
+                )}
+              />
+              <span className="text-xs text-[var(--text-secondary)]">개월</span>
+            </span>
+            {errors.contractMonths && <span className="mt-1 block text-[10px] text-[#ff705d]">{errors.contractMonths.message}</span>}
+          </label>
+        </div>
+        <button
+          type="submit"
+          disabled={!isValid}
+          className="mt-7 h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d9dfe4]"
+        >
+          수정 내용 적용
+        </button>
+      </form>
     </BottomSheet>
   )
 }
 
-function SheetTextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function SheetTextField({ label, error, registration }: { label: string; error?: string; registration: UseFormRegisterReturn }) {
   return (
     <label className="block">
       <span className="text-xs font-bold">{label}</span>
       <input
         type="text"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
+        {...registration}
         className="mt-2 h-12 w-full rounded-lg border border-[#dce1e4] bg-white px-3 text-sm outline-none focus:border-[var(--brand)]"
       />
+      {error && <span className="mt-1 block text-[10px] text-[#ff705d]">{error}</span>}
     </label>
   )
 }
 
 function EditableCostsSheet({ section, onApply, onClose }: { section: CostSectionData; onApply: (values: Record<string, string>) => void; onClose: () => void }) {
-  const [values, setValues] = useState(() => section.items.map((item) => item.amount?.toString() ?? ""))
+  const { control, formState: { isValid }, handleSubmit } = useForm<CostAmountsFormValues>({
+    resolver: zodResolver(costAmountsSchema),
+    defaultValues: { amounts: Object.fromEntries(section.items.map((item) => [item.id, item.amount?.toString() ?? ""])) },
+    mode: "onChange",
+  })
 
   return (
     <BottomSheet onClose={onClose}>
-      <h2 className="text-lg font-bold">{section.title} 수정</h2>
-      <p className="mt-1 text-xs text-[var(--text-secondary)]">확인한 금액을 엔화 기준으로 입력해주세요.</p>
-      <div className="mt-5 divide-y divide-[#edf0f2]">
-        {section.items.map((item, index) => (
-          <label key={item.id} className="flex min-h-[68px] items-center justify-between gap-4 py-2">
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold">{item.label}</span>
-              {getCostItemBadge(item) && <span className="mt-1 block text-[10px] font-bold text-[#ff705d]">{getCostItemBadge(item)}</span>}
-            </span>
-            <span className="flex h-10 w-32 shrink-0 items-center rounded-lg border border-[#dce1e4] px-3 focus-within:border-[var(--brand)]">
-              <input
-                aria-label={`${item.label} 금액`}
-                type="text"
-                inputMode="numeric"
-                value={values[index]}
-                placeholder="금액 입력"
-                onChange={(event) => {
-                  const nextValue = event.target.value.replace(/\D/g, "")
-                  setValues((current) => current.map((value, itemIndex) => itemIndex === index ? nextValue : value))
-                }}
-                className="min-w-0 flex-1 bg-transparent text-right text-sm tabular-nums outline-none placeholder:text-[11px] placeholder:text-[#aab2bb]"
-              />
-              <span className="ml-1 text-[10px] text-[var(--text-secondary)]">JPY</span>
-            </span>
-          </label>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={() => onApply(Object.fromEntries(section.items.map((item, index) => [item.id, values[index]])))}
-        className="mt-6 h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white"
-      >
-        수정 내용 적용
-      </button>
+      <form onSubmit={handleSubmit(({ amounts }) => onApply(amounts))} noValidate>
+        <h2 className="text-lg font-bold">{section.title} 수정</h2>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">확인한 금액을 엔화 기준으로 입력해주세요.</p>
+        <div className="mt-5 divide-y divide-[#edf0f2]">
+          {section.items.map((item) => (
+            <label key={item.id} className="flex min-h-[68px] items-center justify-between gap-4 py-2">
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">{item.label}</span>
+                {getCostItemBadge(item) && <span className="mt-1 block text-[10px] font-bold text-[#ff705d]">{getCostItemBadge(item)}</span>}
+              </span>
+              <span className="flex h-10 w-32 shrink-0 items-center rounded-lg border border-[#dce1e4] px-3 focus-within:border-[var(--brand)]">
+                <Controller
+                  name={`amounts.${item.id}`}
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      aria-label={`${item.label} 금액`}
+                      type="text"
+                      inputMode="numeric"
+                      value={field.value}
+                      placeholder="금액 입력"
+                      onBlur={field.onBlur}
+                      onChange={(event) => field.onChange(event.target.value.replace(/\D/g, ""))}
+                      ref={field.ref}
+                      className="min-w-0 flex-1 bg-transparent text-right text-sm tabular-nums outline-none placeholder:text-[11px] placeholder:text-[#aab2bb]"
+                    />
+                  )}
+                />
+                <span className="ml-1 text-[10px] text-[var(--text-secondary)]">JPY</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <button
+          type="submit"
+          disabled={!isValid}
+          className="mt-6 h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d9dfe4]"
+        >
+          수정 내용 적용
+        </button>
+      </form>
     </BottomSheet>
   )
 }
@@ -235,104 +292,141 @@ const verificationPresentation: Record<VerificationType, { detail: string; badge
 
 function VerificationSheet({ item, verification, initialAnswer = "", onClose, onApply }: { item: CostItem; verification: CostVerification; initialAnswer?: string; onApply: (answer: string) => void; onClose: () => void }) {
   const config = verificationPresentation[verification.type]
-  const [answer, setAnswer] = useState(initialAnswer)
+  const {
+    control,
+    formState: { isValid },
+    handleSubmit,
+    setValue,
+  } = useForm<VerificationFormValues>({
+    resolver: zodResolver(verification.type === "AMOUNT" ? amountVerificationSchema : choiceVerificationSchema),
+    defaultValues: { answer: initialAnswer },
+    mode: "onChange",
+  })
+  const answer = useWatch({ control, name: "answer" })
 
   if (verification.type === "AMOUNT") {
     return (
       <BottomSheet onClose={onClose}>
-        <h2 className="text-lg font-bold">{item.label} 확인</h2>
-        <p className="mt-1 text-xs text-[var(--text-secondary)]">{config.subtitle}</p>
-        <p className="mt-5 text-xs text-[var(--text-secondary)]">매물 원문</p>
-        <div className="mt-2 rounded-lg bg-[#f5f6f7] p-4 text-sm">{item.originalText ?? "원문 정보가 없어요."}</div>
-        <label className="mt-6 block">
-          <span className="text-sm font-bold">{config.question}</span>
-          <span className="mt-3 flex items-center border-b border-[#dce1e4] pb-3 focus-within:border-[var(--brand)]">
-            <input
-              type="text"
-              inputMode="numeric"
-              value={answer}
-              onChange={(event) => setAnswer(event.target.value.replace(/\D/g, ""))}
-              placeholder="예) 20,000"
-              className="min-w-0 flex-1 bg-transparent text-xl tabular-nums outline-none placeholder:text-[#aab2bb]"
-            />
-            <span className="text-xs text-[var(--text-secondary)]">JPY</span>
-          </span>
-        </label>
-        <p className="mt-4 text-xs text-[var(--text-secondary)]">{config.helper}</p>
-        <SheetActions applyDisabled={!answer} onApply={() => onApply(answer)} onLater={onClose} />
+        <form onSubmit={handleSubmit(({ answer: value }) => onApply(value))} noValidate>
+          <h2 className="text-lg font-bold">{item.label} 확인</h2>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">{config.subtitle}</p>
+          <p className="mt-5 text-xs text-[var(--text-secondary)]">매물 원문</p>
+          <div className="mt-2 rounded-lg bg-[#f5f6f7] p-4 text-sm">{item.originalText ?? "원문 정보가 없어요."}</div>
+          <label className="mt-6 block">
+            <span className="text-sm font-bold">{config.question}</span>
+            <span className="mt-3 flex items-center border-b border-[#dce1e4] pb-3 focus-within:border-[var(--brand)]">
+              <Controller
+                name="answer"
+                control={control}
+                render={({ field }) => (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={field.value}
+                    onBlur={field.onBlur}
+                    onChange={(event) => field.onChange(event.target.value.replace(/\D/g, ""))}
+                    ref={field.ref}
+                    placeholder="예) 20,000"
+                    className="min-w-0 flex-1 bg-transparent text-xl tabular-nums outline-none placeholder:text-[#aab2bb]"
+                  />
+                )}
+              />
+              <span className="text-xs text-[var(--text-secondary)]">JPY</span>
+            </span>
+          </label>
+          <p className="mt-4 text-xs text-[var(--text-secondary)]">{config.helper}</p>
+          <SheetActions applyDisabled={!isValid} onApply={handleSubmit(({ answer: value }) => onApply(value))} onLater={onClose} />
+        </form>
       </BottomSheet>
     )
   }
 
   return (
     <BottomSheet onClose={onClose}>
-      <h2 className="text-lg font-bold">{item.label} 확인</h2>
-      <p className="mt-1 text-xs text-[var(--text-secondary)]">{config.subtitle}</p>
-      <p className="mt-5 text-xs text-[var(--text-secondary)]">매물 원문</p>
-      <div className="mt-2 rounded-lg bg-[#f5f6f7] p-4 text-sm">{item.originalText ?? "원문 정보가 없어요."}</div>
-      {verification.type === "BROKER_CONFIRMATION" && (
-        <div className="mt-4 flex gap-3 rounded-lg bg-[#15171c] p-4 text-white">
-          <Info aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-[var(--brand)]" />
-          <div>
-            <strong className="text-xs">중개업체에 확인해주세요</strong>
-            <p className="mt-1 text-[11px] text-white/70">중개 수수료와 별도로 내는 비용인지 확인이 필요해요.</p>
+      <form onSubmit={handleSubmit(({ answer: value }) => onApply(value))} noValidate>
+        <h2 className="text-lg font-bold">{item.label} 확인</h2>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">{config.subtitle}</p>
+        <p className="mt-5 text-xs text-[var(--text-secondary)]">매물 원문</p>
+        <div className="mt-2 rounded-lg bg-[#f5f6f7] p-4 text-sm">{item.originalText ?? "원문 정보가 없어요."}</div>
+        {verification.type === "BROKER_CONFIRMATION" && (
+          <div className="mt-4 flex gap-3 rounded-lg bg-[#15171c] p-4 text-white">
+            <Info aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-[var(--brand)]" />
+            <div>
+              <strong className="text-xs">중개업체에 확인해주세요</strong>
+              <p className="mt-1 text-[11px] text-white/70">중개 수수료와 별도로 내는 비용인지 확인이 필요해요.</p>
+            </div>
           </div>
+        )}
+        <h3 className="mt-6 text-sm font-bold">{config.question}</h3>
+        <div className={cn("mt-3 grid gap-2", config.choices.length === 4 ? "grid-cols-4" : "grid-cols-3")}>
+          {config.choices.map((choice) => (
+            <ChoiceButton
+              key={choice.value}
+              selected={answer === choice.value}
+              onClick={() => setValue("answer", choice.value, { shouldDirty: true, shouldValidate: true })}
+            >
+              {choice.label}
+            </ChoiceButton>
+          ))}
         </div>
-      )}
-      <h3 className="mt-6 text-sm font-bold">{config.question}</h3>
-      <div className={cn("mt-3 grid gap-2", config.choices.length === 4 ? "grid-cols-4" : "grid-cols-3")}>
-        {config.choices.map((choice) => (
-          <ChoiceButton key={choice.value} selected={answer === choice.value} onClick={() => setAnswer(choice.value)}>{choice.label}</ChoiceButton>
-        ))}
-      </div>
-      {config.helper && <p className="mt-4 text-xs text-[var(--text-secondary)]">{config.helper}</p>}
-      <div className="mt-7 space-y-3">
-        <button
-          type="button"
-          disabled={!answer}
-          onClick={() => onApply(answer)}
-          className="h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d9dfe4]"
-        >
-          {config.apply}
-        </button>
-        <button type="button" onClick={onClose} className="h-12 w-full rounded-lg border border-[#dce1e4] text-sm font-bold">
-          나중에 확인하기
-        </button>
-      </div>
+        {config.helper && <p className="mt-4 text-xs text-[var(--text-secondary)]">{config.helper}</p>}
+        <div className="mt-7 space-y-3">
+          <button
+            type="submit"
+            disabled={!isValid}
+            className="h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d9dfe4]"
+          >
+            {config.apply}
+          </button>
+          <button type="button" onClick={onClose} className="h-12 w-full rounded-lg border border-[#dce1e4] text-sm font-bold">
+            나중에 확인하기
+          </button>
+        </div>
+      </form>
     </BottomSheet>
   )
 }
 
 function SelectionCostsSheet({ items, initialSelectedIds, onApply, onClose }: { items: CostItem[]; initialSelectedIds: string[]; onApply: (ids: string[]) => void; onClose: () => void }) {
-  const [selectedIds, setSelectedIds] = useState(initialSelectedIds)
+  const { control, handleSubmit, setValue } = useForm<SelectionCostsFormValues>({
+    resolver: zodResolver(selectionCostsSchema),
+    defaultValues: { selectedIds: initialSelectedIds },
+  })
+  const selectedIds = useWatch({ control, name: "selectedIds" })
 
   return (
     <BottomSheet onClose={onClose}>
-      <h2 className="text-lg font-bold">선택 비용</h2>
-      <p className="mt-1 text-xs text-[var(--text-secondary)]">필요한 서비스만 골라주세요.</p>
-      <div className="mt-4 divide-y divide-[#e6eaed]">
-        {items.map((item) => (
-          <label key={item.id} className="flex min-h-[68px] cursor-pointer items-center justify-between gap-4">
-            <span>
-              <span className="block text-sm font-bold">{item.label}</span>
-              <span className="mt-1 block text-xs text-[var(--text-secondary)]">
-                {formatCostItemValue(item)}{item.calculationPeriod === "INITIAL" ? " · 초기 1회" : ""}
+      <form onSubmit={handleSubmit(({ selectedIds: ids }) => onApply(ids))} noValidate>
+        <h2 className="text-lg font-bold">선택 비용</h2>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">필요한 서비스만 골라주세요.</p>
+        <div className="mt-4 divide-y divide-[#e6eaed]">
+          {items.map((item) => (
+            <label key={item.id} className="flex min-h-[68px] cursor-pointer items-center justify-between gap-4">
+              <span>
+                <span className="block text-sm font-bold">{item.label}</span>
+                <span className="mt-1 block text-xs text-[var(--text-secondary)]">
+                  {formatCostItemValue(item)}{item.calculationPeriod === "INITIAL" ? " · 초기 1회" : ""}
+                </span>
               </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={selectedIds.includes(item.id)}
-              onChange={() => setSelectedIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
-              className="peer sr-only"
-            />
-            <span className="relative h-8 w-12 shrink-0 rounded-full bg-[#e9edf0] transition-colors peer-checked:bg-[var(--brand)] after:absolute after:top-1 after:left-1 after:size-6 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
-          </label>
-        ))}
-      </div>
-      <p className="mt-5 text-xs text-[var(--text-secondary)]">선택 비용은 언제든 다시 바꿀 수 있어요.</p>
-      <button type="button" onClick={() => onApply(selectedIds)} className="mt-7 h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white">
-        선택한 비용 적용
-      </button>
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(item.id)}
+                onChange={() => setValue(
+                  "selectedIds",
+                  selectedIds.includes(item.id) ? selectedIds.filter((id) => id !== item.id) : [...selectedIds, item.id],
+                  { shouldDirty: true, shouldValidate: true },
+                )}
+                className="peer sr-only"
+              />
+              <span className="relative h-8 w-12 shrink-0 rounded-full bg-[#e9edf0] transition-colors peer-checked:bg-[var(--brand)] after:absolute after:top-1 after:left-1 after:size-6 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+            </label>
+          ))}
+        </div>
+        <p className="mt-5 text-xs text-[var(--text-secondary)]">선택 비용은 언제든 다시 바꿀 수 있어요.</p>
+        <button type="submit" className="mt-7 h-12 w-full rounded-lg bg-[var(--brand)] text-sm font-bold text-white">
+          선택한 비용 적용
+        </button>
+      </form>
     </BottomSheet>
   )
 }
