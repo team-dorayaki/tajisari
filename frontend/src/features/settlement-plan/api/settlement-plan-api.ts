@@ -26,7 +26,7 @@ const costTypeMap: Record<AdditionalCostKey | MonthlyCostKey, string> = {
 }
 function getStoredPlanId() { return typeof window === "undefined" ? null : window.localStorage.getItem(planIdKey) }
 function toUiPlan(plan: BackendPlan): SettlementPlan {
-  const exchangeRate = Number(window.localStorage.getItem("tajisari.exchangeRate")) || JPY_TO_KRW_EXCHANGE_RATE
+  const exchangeRate = JPY_TO_KRW_EXCHANGE_RATE
   const exchangeRateUpdatedAt = todayInKorea()
   return {
     planId: String(plan.planId), moveInDate: plan.moveInDate, stayMonths: plan.plannedStayMonths,

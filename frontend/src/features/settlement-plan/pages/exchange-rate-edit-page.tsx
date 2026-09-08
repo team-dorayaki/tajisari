@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { ArrowLeft, Check } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
@@ -7,19 +6,7 @@ import { JPY_TO_KRW_EXCHANGE_RATE } from "@/constants/currency"
 
 function ExchangeRateEditPage() {
   const navigate = useNavigate()
-  const [rate, setRate] = useState(String(JPY_TO_KRW_EXCHANGE_RATE))
-  const [isSaving, setIsSaving] = useState(false)
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
-
-  const handleSave = async () => {
-    const parsedRate = Number(rate.replaceAll(",", ""))
-    if (!Number.isFinite(parsedRate) || parsedRate <= 0) return
-
-    setIsSaving(true)
-    window.localStorage.setItem("tajisari.exchangeRate", String(parsedRate))
-    window.localStorage.setItem("tajisari.exchangeRateUpdatedAt", today)
-    void navigate("/my")
-  }
 
   return (
     <main className="flex min-h-dvh flex-col bg-[#f5f6f7] pb-[calc(92px+env(safe-area-inset-bottom))]">
@@ -32,29 +19,21 @@ function ExchangeRateEditPage() {
         </div>
       </header>
       <section className="flex-1 px-4 pt-8">
-        <h2 className="text-[19px] font-bold tracking-[-0.03em]">계산에 적용할 환율을 입력해주세요</h2>
-        <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">100엔을 원화로 환산할 기준을 설정해요.</p>
+        <h2 className="text-[19px] font-bold tracking-[-0.03em]">계산에 적용하는 환율이에요</h2>
+        <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">환율은 100엔당 860원으로 고정 적용돼요.</p>
 
         <div className="mt-6 rounded-xl bg-white p-5 shadow-[0_1px_2px_rgb(15_23_42/0.04)]">
-          <label className="block text-xs font-bold text-[var(--brand)]" htmlFor="exchange-rate">기준 환율</label>
+          <p className="block text-xs font-bold text-[var(--brand)]">기준 환율</p>
           <div className="mt-3 flex items-end gap-3 border-b-2 border-[var(--brand)] pb-3">
             <span className="text-[22px] font-bold">¥100 = ₩</span>
-            <input
-              id="exchange-rate"
-              type="text"
-              inputMode="numeric"
-              value={rate ? Number(rate).toLocaleString("ko-KR") : ""}
-              onChange={(event) => setRate(event.target.value.replace(/[^0-9]/g, ""))}
-              className="min-w-0 flex-1 bg-transparent text-right text-[22px] font-bold tabular-nums outline-none"
-              aria-label="100엔 환율"
-            />
+            <strong className="min-w-0 flex-1 text-right text-[22px] font-bold tabular-nums">{JPY_TO_KRW_EXCHANGE_RATE.toLocaleString("ko-KR")}</strong>
           </div>
           <p className="mt-4 flex items-center gap-1 text-xs text-[var(--text-secondary)]"><Check className="size-4 text-[var(--brand)]" />{today.replaceAll("-", ".")} 기준으로 적용돼요.</p>
         </div>
       </section>
       <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[430px] bg-gradient-to-t from-[#f5f6f7] from-70% to-transparent px-4 pt-6 pb-[calc(14px+env(safe-area-inset-bottom))]">
-        <Button type="button" onClick={() => void handleSave()} disabled={isSaving || !rate} className="h-12 w-full rounded-lg bg-[var(--brand)] text-[15px] font-bold text-white hover:bg-[var(--brand)]/90">
-          {isSaving ? "저장 중..." : "저장하기"}
+        <Button type="button" onClick={() => void navigate("/my")} className="h-12 w-full rounded-lg bg-[var(--brand)] text-[15px] font-bold text-white hover:bg-[var(--brand)]/90">
+          확인
         </Button>
       </div>
     </main>

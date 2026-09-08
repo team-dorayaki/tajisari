@@ -106,7 +106,7 @@ function MySettlementPlanPage() {
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-[18px] font-bold tracking-[-0.03em]">적용 환율</h2>
                 <Link to="/plan/exchange-rate" className="flex min-h-8 items-center gap-0.5 text-sm font-bold text-[var(--brand)]">
-                  수정 <ChevronRight aria-hidden="true" className="size-4" strokeWidth={2.5} />
+                  보기 <ChevronRight aria-hidden="true" className="size-4" strokeWidth={2.5} />
                 </Link>
               </div>
               <dl className="space-y-3.5">
