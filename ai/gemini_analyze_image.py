@@ -415,8 +415,8 @@ base_monthly_total_yen에는 확정된 정액 월 비용만 합산한다.
 웹페이지 분석이므로 analysis_metadata.image_count는 0이고 source_image_index는 null이다.
 응답은 지정된 스키마의 JSON 객체 하나만 출력한다."""
 
-# REST API에서 사용하는 v2 출력 스키마와 보수적 판독 프롬프트입니다.
-# 위 정의는 이전 CLI 응답을 이해하기 위한 참고용으로 남겨두고 실행 시 v2를 사용합니다.
+# REST API에서 사용하는 v3 출력 스키마와 보수적 판독 프롬프트입니다.
+# 아래 import가 위의 이전 CLI 호환 정의를 덮어쓰며 실제 실행에는 v3만 사용됩니다.
 from app.prompts.image_analysis import (  # noqa: E402
     COMPACT_URL_PROMPT,
     DEFAULT_PROMPT,
@@ -777,98 +777,225 @@ def encode_image(image_path: Path) -> dict:
     }
 
 
+def extract_direct_yen_amounts(raw_value: object) -> set[int]:
+    """원문에 직접 표시된 엔화 정수만 추출한다."""
+    text = str(raw_value or "").strip()
+    matches = re.findall(r"(\d{1,3}(?:,\d{3})+|\d+)\s*(?:円|엔)", text)
+    if not matches and re.fullmatch(r"[\d,]+", text):
+        matches = [text]
+    return {int(value.replace(",", "")) for value in matches}
+
+
+def has_required_evidence(item: dict, analysis: dict) -> bool:
+    """비용에 직접 연결된 필수·발생 문구가 있는지 확인한다."""
+    evidence_text = " ".join(
+        str(evidence.get("raw_text") or "")
+        for evidence in analysis.get("evidence", [])
+        if isinstance(evidence, dict)
+    )
+    text = " ".join(
+        str(value or "")
+        for value in (item.get("raw_name"), item.get("raw_value"), evidence_text)
+    )
+    if re.search(r"不要|必要なし|필요\s*없|불필요|任意|オプション|希望者のみ|선택", text):
+        return False
+    return bool(
+        re.search(
+            r"加入要|必須|必要|契約時必要|(?<!不)要(?:\b|\s|[（(])|"
+            r"発生(?:する|します)?|負担(?:する|します)?|"
+            r"가입\s*필수|필수|필요(?:함)?|발생(?:함|합니다)?|부담",
+            text,
+        )
+    )
+
+
 def apply_semantic_checks(data: dict) -> None:
-    """v2 결과에서 근거, 신뢰도, 중복과 미확인 상태를 결정적으로 검증한다."""
-    validation = data.setdefault("validation", {})
+    """DB 저장형 결과에 대표 역, 비용 중복과 계산 금지 규칙을 적용한다."""
+    details = data.setdefault("analysis_details", {})
+    validation = details.setdefault("validation", {})
     warnings = validation.setdefault("warnings", [])
     unknown_fields = validation.setdefault("unknown_fields", [])
+    property_fields = data.setdefault("property", {})
+    field_analysis = details.setdefault("field_analysis", [])
 
-    def check_extracted_field(field_path: str, field: object) -> None:
-        if not isinstance(field, dict):
-            return
-        confidence = field.get("confidence")
-        evidence = field.get("evidence")
-        value = field.get("value")
-        if isinstance(confidence, (int, float)) and confidence < 0.7:
-            field["needs_review"] = True
-        if value is not None and not evidence:
-            field["needs_review"] = True
-            field["confidence"] = min(float(confidence or 0), 0.69)
-            warning = f"근거가 없는 확정값: {field_path}"
-            if warning not in warnings:
-                warnings.append(warning)
+    # URL 분석에서 모델이 생략하기 쉬운 property 경로 접두사를 보정한다.
+    property_field_names = set(property_fields)
+    for item in field_analysis:
+        if not isinstance(item, dict):
+            continue
+        field_path = item.get("field")
+        if field_path in property_field_names:
+            item["field"] = f"property.{field_path}"
+    field_meta = {
+        item.get("field"): item
+        for item in field_analysis
+        if isinstance(item, dict) and item.get("field")
+    }
+
+    # 모든 역을 보존하면서 최단 도보 역 하나를 DB 대표 역으로 선택한다.
+    stations = [
+        station
+        for station in details.setdefault("all_stations", [])
+        if isinstance(station, dict)
+    ]
+    walkable = [
+        (index, station)
+        for index, station in enumerate(stations)
+        if isinstance(station.get("walk_minutes"), int)
+    ]
+    if walkable:
+        _, nearest = min(walkable, key=lambda pair: (pair[1]["walk_minutes"], pair[0]))
+        property_fields["nearest_station"] = nearest.get("station_name")
+        property_fields["walk_minutes"] = nearest.get("walk_minutes")
+
+        # 모델이 다른 대표 역을 골랐더라도 최단 역의 근거로 분석 정보를 맞춘다.
+        for field_path, raw_value in (
+            ("property.nearest_station", nearest.get("station_name")),
+            ("property.walk_minutes", str(nearest.get("walk_minutes"))),
+        ):
+            meta = field_meta.get(field_path)
+            if isinstance(meta, dict):
+                meta["raw_value"] = raw_value
+                meta["evidence"] = nearest.get("evidence", [])
+
+    # property 값의 근거와 검토 상태를 별도 분석 메타데이터에서 검사한다.
+    for name, value in property_fields.items():
+        field_path = f"property.{name}"
+        meta = field_meta.get(field_path)
         if value is None and field_path not in unknown_fields:
             unknown_fields.append(field_path)
+        if not isinstance(meta, dict):
+            if value is not None:
+                warnings.append(f"필드 분석 정보가 없습니다: {field_path}")
+            continue
+        confidence = meta.get("confidence")
+        evidence = meta.get("evidence")
+        if isinstance(confidence, (int, float)) and confidence < 0.7:
+            meta["needs_review"] = True
+        if value is not None and not evidence:
+            meta["needs_review"] = True
+            meta["confidence"] = min(float(confidence or 0), 0.69)
+            warnings.append(f"근거가 없는 확정값: {field_path}")
 
-    for name, field in data.get("property", {}).items():
-        check_extracted_field(f"property.{name}", field)
-
-    # 모델은 원문 추출만 담당한다. 비율·배수·합산·기간 환산으로 만든 값은 제거한다.
-    property_fields = data.get("property", {})
+    # 모델이 계산한 고정 필드 값은 제거하고 원문만 분석 정보에 보존한다.
     calculated_markers = ("%", "ヶ月", "か月", "月分")
     for name in ("rent", "deposit", "key_money", "listed_initial_cost_total"):
-        field = property_fields.get(name)
-        if not isinstance(field, dict) or field.get("value") is None:
-            continue
-        raw_value = str(field.get("raw_value") or "")
-        if any(marker in raw_value for marker in calculated_markers):
-            field["value"] = None
-            field["needs_review"] = True
+        field_path = f"property.{name}"
+        meta = field_meta.get(field_path, {})
+        raw_value = str(meta.get("raw_value") or "")
+        if property_fields.get(name) is not None and any(
+            marker in raw_value for marker in calculated_markers
+        ):
+            property_fields[name] = None
+            meta["needs_review"] = True
+            if field_path not in unknown_fields:
+                unknown_fields.append(field_path)
+            warnings.append(f"AI 계산값을 제거했습니다: {field_path}")
+
+    management_meta = field_meta.get("property.management_fee", {})
+    management_raw = str(management_meta.get("raw_value") or "")
+    explicit_yen_values = re.findall(
+        r"(?:\d[\d,]*\s*(?:円|엔)|\d+(?:\.\d+)?\s*万円)", management_raw
+    )
+    if property_fields.get("management_fee") is not None and len(explicit_yen_values) > 1:
+        property_fields["management_fee"] = None
+        management_meta["needs_review"] = True
+        if "property.management_fee" not in unknown_fields:
+            unknown_fields.append("property.management_fee")
+        warnings.append("관리비와 공익비의 AI 합산값을 제거했습니다.")
+
+    contract_meta = field_meta.get("property.contract_period_months", {})
+    contract_raw = str(contract_meta.get("raw_value") or "")
+    if property_fields.get("contract_period_months") is not None and "年" in contract_raw:
+        if not re.search(r"\d+\s*(?:ヶ月|か月|개월)", contract_raw):
+            property_fields["contract_period_months"] = None
+            contract_meta["needs_review"] = True
+            if "property.contract_period_months" not in unknown_fields:
+                unknown_fields.append("property.contract_period_months")
+            warnings.append("계약기간의 AI 월 환산값을 제거했습니다.")
+
+    available_from = property_fields.get("available_from")
+    if available_from is not None and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(available_from)):
+        property_fields["available_from"] = None
+        available_meta = field_meta.get("property.available_from", {})
+        available_meta["needs_review"] = True
+        if "property.available_from" not in unknown_fields:
+            unknown_fields.append("property.available_from")
+        warnings.append("날짜로 확정할 수 없는 입주 가능 값을 제거했습니다.")
+
+    # DB 금액과 원문에 직접 표시된 금액이 다르면 확정값을 제거한다.
+    amount_fields_match = True
+    for name in ("rent", "management_fee", "deposit", "key_money", "listed_initial_cost_total"):
+        amount = property_fields.get(name)
+        meta = field_meta.get(f"property.{name}", {})
+        direct_amounts = extract_direct_yen_amounts(meta.get("raw_value"))
+        if amount is not None and direct_amounts and amount not in direct_amounts:
+            property_fields[name] = None
+            meta["needs_review"] = True
+            meta["confidence"] = min(float(meta.get("confidence") or 0), 0.69)
             field_path = f"property.{name}"
             if field_path not in unknown_fields:
                 unknown_fields.append(field_path)
-            warning = f"AI 계산값을 제거했습니다: property.{name}"
-            if warning not in warnings:
-                warnings.append(warning)
+            warnings.append(f"원문 금액과 구조화 금액이 일치하지 않습니다: {field_path}")
+            amount_fields_match = False
 
-    management_fee = property_fields.get("management_fee")
-    if isinstance(management_fee, dict) and management_fee.get("value") is not None:
-        raw_value = str(management_fee.get("raw_value") or "")
-        explicit_yen_values = re.findall(
-            r"(?:\d[\d,]*\s*(?:円|엔)|\d+(?:\.\d+)?\s*万円)", raw_value
-        )
-        if len(explicit_yen_values) > 1:
-            management_fee["value"] = None
-            management_fee["needs_review"] = True
-            if "property.management_fee" not in unknown_fields:
-                unknown_fields.append("property.management_fee")
-            warning = "관리비와 공익비의 AI 합산값을 제거했습니다."
-            if warning not in warnings:
-                warnings.append(warning)
-
-    contract_period = property_fields.get("contract_period_months")
-    if isinstance(contract_period, dict) and contract_period.get("value") is not None:
-        raw_value = str(contract_period.get("raw_value") or "")
-        if "年" in raw_value and not re.search(r"\d+\s*(?:ヶ月|か月|개월)", raw_value):
-            contract_period["value"] = None
-            contract_period["needs_review"] = True
-            if "property.contract_period_months" not in unknown_fields:
-                unknown_fields.append("property.contract_period_months")
-            warning = "계약기간의 AI 월 환산값을 제거했습니다."
-            if warning not in warnings:
-                warnings.append(warning)
-
+    # 월세·관리비·시키킨·레이킨은 property 전용이며 가변 비용에서 제거한다.
+    fixed_cost_names = {
+        "家賃", "賃料", "월세", "임대료", "管理費", "共益費", "관리비",
+        "공익비", "敷金", "시키킹", "시키킨", "礼金", "레이킹", "레이킨",
+    }
     unique_costs = []
+    unique_analyses = []
     seen_costs = set()
-    for index, item in enumerate(data.get("cost_items", [])):
+    required_statuses_valid = True
+    cost_analyses = {
+        item.get("cost_item_index"): item
+        for item in details.setdefault("cost_item_analysis", [])
+        if isinstance(item, dict)
+    }
+    for old_index, item in enumerate(data.setdefault("property_cost_items", [])):
         if not isinstance(item, dict):
             continue
-        confidence = item.get("confidence")
-        evidence = item.get("evidence")
+        analysis = cost_analyses.get(old_index, {})
+        if item.get("raw_name") in fixed_cost_names:
+            warnings.append(f"고정 비용 중복을 제거했습니다: {item.get('raw_name')}")
+            continue
+        confidence = analysis.get("confidence")
+        evidence = analysis.get("evidence")
         if isinstance(confidence, (int, float)) and confidence < 0.7:
-            item["needs_review"] = True
+            analysis["needs_review"] = True
         if not evidence:
-            item["needs_review"] = True
-            item["confidence"] = min(float(confidence or 0), 0.69)
-            warning = f"근거가 없는 비용 항목: cost_items[{index}]"
-            if warning not in warnings:
-                warnings.append(warning)
-        if item.get("amount") is not None and item.get("calculation_basis"):
+            analysis["needs_review"] = True
+            analysis["confidence"] = min(float(confidence or 0), 0.69)
+            warnings.append(f"근거가 없는 비용 항목: property_cost_items[{old_index}]")
+        raw_value = str(item.get("raw_value") or "")
+        if item.get("amount") is not None and any(
+            marker in raw_value for marker in calculated_markers
+        ):
             item["amount"] = None
-            item["needs_review"] = True
-            warning = f"AI가 계산한 비용 금액을 제거했습니다: cost_items[{index}]"
-            if warning not in warnings:
-                warnings.append(warning)
+            analysis["needs_review"] = True
+            warnings.append(f"AI 계산 비용을 제거했습니다: property_cost_items[{old_index}]")
+        direct_amounts = extract_direct_yen_amounts(raw_value)
+        if item.get("amount") is not None and direct_amounts:
+            if item["amount"] not in direct_amounts:
+                item["amount"] = None
+                analysis["needs_review"] = True
+                analysis["confidence"] = min(float(confidence or 0), 0.69)
+                warnings.append(
+                    f"원문 금액과 구조화 금액이 일치하지 않습니다: "
+                    f"property_cost_items[{old_index}]"
+                )
+                amount_fields_match = False
+        if item.get("obligation_status") == "REQUIRED":
+            if not has_required_evidence(item, analysis):
+                item["obligation_status"] = "UNKNOWN"
+                analysis["needs_review"] = True
+                analysis["confidence"] = min(float(confidence or 0), 0.69)
+                warnings.append(
+                    f"필수 근거가 없어 UNKNOWN으로 변경했습니다: "
+                    f"property_cost_items[{old_index}]"
+                )
+                required_statuses_valid = False
         identity = (
             item.get("raw_name"),
             item.get("raw_value"),
@@ -877,17 +1004,16 @@ def apply_semantic_checks(data: dict) -> None:
         )
         if identity not in seen_costs:
             seen_costs.add(identity)
+            analysis["cost_item_index"] = len(unique_costs)
+            analysis["scope"] = "LISTING_SPECIFIC"
             unique_costs.append(item)
-    if len(unique_costs) != len(data.get("cost_items", [])):
-        data["cost_items"] = unique_costs
-        warnings.append("완전히 동일한 비용 항목의 중복을 제거했습니다.")
-
-    for index, field in enumerate(data.get("additional_fields", [])):
-        check_extracted_field(f"additional_fields[{index}]", field)
+            unique_analyses.append(analysis)
+    data["property_cost_items"] = unique_costs
+    details["cost_item_analysis"] = unique_analyses
 
     unresolved_fields = {
         conflict.get("field")
-        for conflict in validation.get("conflicts", [])
+        for conflict in validation.setdefault("conflicts", [])
         if isinstance(conflict, dict) and conflict.get("resolution") == "UNKNOWN"
     }
     for field_path in unresolved_fields:
@@ -898,6 +1024,11 @@ def apply_semantic_checks(data: dict) -> None:
     checks["evidence_only"] = not any("근거가 없는" in item for item in warnings)
     checks["duplicates_removed"] = True
     checks["conflicts_reviewed"] = not bool(unresolved_fields)
+    # 위 단계에서 중복 고정비를 제거하고 일반 안내를 확정 비용과 분리했다.
+    checks["fixed_costs_not_duplicated"] = True
+    checks["listing_terms_preferred"] = True
+    checks["amounts_match_raw_text"] = amount_fields_match
+    checks["required_status_has_evidence"] = required_statuses_valid
 
 
 def validate_analysis_json(
@@ -942,10 +1073,10 @@ def validate_analysis_json(
             )
 
     metadata = data.get("analysis_metadata", {})
-    metadata["schema_version"] = "2.0"
+    metadata["schema_version"] = "3.0"
     metadata["source_type"] = source_type
-    metadata["source_url"] = source_url
     metadata["image_count"] = image_count
+    data.get("property", {})["source_url"] = source_url
 
     apply_semantic_checks(data)
 

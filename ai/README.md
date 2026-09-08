@@ -140,7 +140,7 @@ Invoke-RestMethod `
 
 ## 응답 형식
 
-분석 결과는 고정 필드, 가변 비용, 추가 정보와 검증 결과로 구분합니다. `管理費`와 `共益費`는 현재 `management_fee` 하나로 합치고 원문은 `raw_value`에 보존합니다. 아래 JSON은 구조를 설명하기 위해 일부 고정 필드를 생략한 예시입니다.
+분석 결과는 DB에 바로 대응하는 `property`, `property_cost_items`와 검증용 `analysis_details`로 구분합니다. 전체 결과는 `property_ai_analysis.raw_json`에 보존할 수 있습니다. 아래 JSON은 일부 필드를 생략한 예시입니다.
 
 ```json
 {
@@ -148,63 +148,65 @@ Invoke-RestMethod `
   "model": "gemini-3.5-flash-lite",
   "result": {
     "analysis_metadata": {
-      "schema_version": "2.0",
+      "schema_version": "3.0",
       "source_type": "IMAGE",
-      "source_site": "SUUMO",
-      "source_url": null,
       "image_count": 2
     },
     "property": {
-      "rent": {
-        "value": 65000,
-        "raw_value": "65,000円",
-        "confidence": 0.99,
-        "needs_review": false,
-        "evidence": [
-          {
-            "source_type": "IMAGE",
-            "source_index": 1,
-            "source_url": null,
-            "raw_text": "65,000円"
-          }
-        ]
-      },
-      "management_fee": {
-        "value": 5000,
-        "raw_value": "管理費 5,000円",
-        "confidence": 0.98,
-        "needs_review": false,
-        "evidence": [
-          {
-            "source_type": "IMAGE",
-            "source_index": 1,
-            "source_url": null,
-            "raw_text": "管理費 5,000円"
-          }
-        ]
-      }
+      "source_site": "SUUMO",
+      "source_url": null,
+      "property_name": "サンプルハイツ 203",
+      "prefecture": "東京都",
+      "city": "北区",
+      "exclusive_area_m2": 18.0,
+      "nearest_station": "栄町駅",
+      "walk_minutes": 5,
+      "rent": 65000,
+      "management_fee": 5000,
+      "deposit": 65000,
+      "key_money": 65000,
+      "available_from": null,
+      "contract_period_months": null,
+      "listed_initial_cost_total": null
     },
-    "cost_items": [],
-    "additional_fields": [],
-    "validation": {
-      "conflicts": [],
-      "warnings": [],
-      "unknown_fields": [],
-      "checks": {
-        "evidence_only": true,
-        "amount_does_not_imply_required": true,
-        "zero_and_null_distinguished": true,
-        "duplicates_removed": true,
-        "conflicts_reviewed": true
+    "property_cost_items": [
+      {
+        "raw_name": "保証委託料",
+        "display_name": "보증 위탁료",
+        "amount": null,
+        "raw_value": "賃料総額の50%",
+        "obligation_status": "REQUIRED",
+        "timing": "INITIAL"
+      }
+    ],
+    "analysis_details": {
+      "field_analysis": [],
+      "cost_item_analysis": [],
+      "all_stations": [],
+      "additional_fields": [],
+      "reference_information": [],
+      "validation": {
+        "conflicts": [],
+        "warnings": [],
+        "unknown_fields": [],
+        "checks": {
+          "evidence_only": true,
+          "duplicates_removed": true,
+          "conflicts_reviewed": true,
+          "fixed_costs_not_duplicated": true,
+          "listing_terms_preferred": true,
+          "amounts_match_raw_text": true,
+          "required_status_has_evidence": true
+        }
       }
     }
   }
 }
 ```
 
-`value`가 `null`이면 미기재 또는 미확인이고, 원문에 `なし`, `不要`, `0円`이 명시된 경우에만 `0`으로 기록합니다. 신뢰도가 0.7 미만이거나 근거가 없거나 충돌이 해결되지 않으면 `needs_review`가 `true`가 됩니다.
+DB 대응 필드가 `null`이면 미기재 또는 미확인이고, 원문에 `なし`, `不要`, `0円`이 명시된 경우에만 `0`으로 기록합니다. 신뢰도와 근거는 `analysis_details`에 분리되며, 신뢰도가 0.7 미만이거나 근거가 없거나 충돌이 해결되지 않으면 `needs_review`가 `true`가 됩니다.
 
-Gemini는 원문 추출만 담당하며 비율·배수·합산·기간 환산을 수행하지 않습니다. `1ヶ月`, `総賃料の50%`처럼 계산이 필요한 표현은 `raw_value`와 `calculation_basis`에 보존하고 금액은 `null`로 반환합니다. 관리비와 공익비가 별도 금액으로 함께 표시된 경우에도 Gemini가 합산하지 않습니다. 모델이 계산값을 반환하면 서버 후처리가 해당 값을 제거하고 확인 필요 상태로 변경합니다.
+Gemini는 원문 추출만 담당하며 비율·배수·합산·기간 환산을 수행하지 않습니다. `1ヶ月`, `総賃料の50%`, `2年`처럼 계산이 필요한 표현은 원문으로 보존하고 계산 결과 필드는 `null`로 반환합니다. 대표 역은 도보 시간이 가장 짧은 한 곳만 `property`에 두고 전체 역은 `analysis_details.all_stations`에 보존합니다. 월세·관리비·시키킨·레이킨은 `property`에만 저장하며 가변 비용과 중복하지 않습니다. 회사 일반 안내는 현재 매물에 적용된다는 근거가 없으면 `reference_information`에만 보존합니다.
 
 오류 응답은 프론트엔드에서 구분할 수 있도록 공통 형식으로 반환합니다.
 

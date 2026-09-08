@@ -116,84 +116,237 @@ def test_url_context_failure_statuses_are_classified(
     assert app_error.code == expected_code
 
 
-def test_analysis_output_schema_v2_uses_fixed_and_variable_fields() -> None:
+def test_analysis_output_schema_v3_matches_database_fields() -> None:
     properties = OUTPUT_SCHEMA["properties"]
     fixed_fields = properties["property"]["properties"]
 
     assert set(properties) == {
         "analysis_metadata",
         "property",
-        "cost_items",
-        "additional_fields",
-        "validation",
+        "property_cost_items",
+        "analysis_details",
     }
     assert properties["analysis_metadata"]["properties"]["schema_version"]["enum"] == [
-        "2.0"
+        "3.0"
     ]
-    assert "management_fee" in fixed_fields
+    assert set(fixed_fields) == {
+        "source_site",
+        "source_url",
+        "property_name",
+        "prefecture",
+        "city",
+        "exclusive_area_m2",
+        "nearest_station",
+        "walk_minutes",
+        "rent",
+        "management_fee",
+        "deposit",
+        "key_money",
+        "available_from",
+        "contract_period_months",
+        "listed_initial_cost_total",
+    }
     assert "common_service_fee" not in fixed_fields
-    assert "cost_items" in properties
-    assert "additional_fields" in properties
 
 
-def test_management_fee_keeps_evidence_and_review_fields() -> None:
-    management_fee = OUTPUT_SCHEMA["properties"]["property"]["properties"][
-        "management_fee"
-    ]["properties"]
+def test_property_cost_item_matches_database_insert_fields() -> None:
+    cost_item = OUTPUT_SCHEMA["properties"]["property_cost_items"]["items"]
 
-    assert set(management_fee) == {
-        "value",
+    assert set(cost_item["properties"]) == {
+        "raw_name",
+        "display_name",
+        "amount",
         "raw_value",
-        "confidence",
-        "needs_review",
-        "evidence",
+        "obligation_status",
+        "timing",
     }
 
 
 def test_semantic_checks_remove_model_calculations() -> None:
     data = {
         "property": {
-            "deposit": {
-                "value": 65000,
-                "raw_value": "1ヶ月",
-                "confidence": 0.9,
-                "needs_review": False,
-                "evidence": [{"raw_text": "敷金 1ヶ月"}],
-            },
-            "management_fee": {
-                "value": 8000,
-                "raw_value": "管理費 5,000円 / 共益費 3,000円",
-                "confidence": 0.9,
-                "needs_review": False,
-                "evidence": [{"raw_text": "管理費 5,000円 / 共益費 3,000円"}],
-            },
-            "contract_period_months": {
-                "value": 24,
-                "raw_value": "2年",
-                "confidence": 0.9,
-                "needs_review": False,
-                "evidence": [{"raw_text": "契約期間 2年"}],
-            },
+            "source_site": "GTN_BEST_ESTATE",
+            "source_url": None,
+            "property_name": "테스트 매물",
+            "prefecture": "도쿄도",
+            "city": "기타구",
+            "exclusive_area_m2": 18.0,
+            "nearest_station": None,
+            "walk_minutes": None,
+            "rent": 65000,
+            "management_fee": 8000,
+            "deposit": 65000,
+            "key_money": 0,
+            "available_from": None,
+            "contract_period_months": 24,
+            "listed_initial_cost_total": None,
         },
-        "cost_items": [
+        "property_cost_items": [
             {
                 "raw_name": "保証委託料",
+                "display_name": "초기 보증위탁료",
                 "amount": 35000,
                 "raw_value": "総賃料の50%",
-                "calculation_basis": "総賃料 × 50%",
-                "confidence": 0.8,
-                "needs_review": False,
-                "evidence": [{"raw_text": "初回保証料 総賃料の50%"}],
-            }
+                "obligation_status": "REQUIRED",
+                "timing": "INITIAL",
+            },
+            {
+                "raw_name": "家賃",
+                "display_name": "월세",
+                "amount": 65000,
+                "raw_value": "65,000円",
+                "obligation_status": "REQUIRED",
+                "timing": "MONTHLY",
+            },
         ],
-        "additional_fields": [],
-        "validation": {"warnings": [], "unknown_fields": [], "conflicts": []},
+        "analysis_details": {
+            "field_analysis": [
+                {
+                    "field": "property.deposit",
+                    "raw_value": "1ヶ月",
+                    "confidence": 0.9,
+                    "needs_review": False,
+                    "evidence": [{"raw_text": "敷金 1ヶ月"}],
+                },
+                {
+                    "field": "property.management_fee",
+                    "raw_value": "管理費 5,000円 / 共益費 3,000円",
+                    "confidence": 0.9,
+                    "needs_review": False,
+                    "evidence": [{"raw_text": "管理費 5,000円 / 共益費 3,000円"}],
+                },
+                {
+                    "field": "property.contract_period_months",
+                    "raw_value": "2年",
+                    "confidence": 0.9,
+                    "needs_review": False,
+                    "evidence": [{"raw_text": "契約期間 2年"}],
+                },
+            ],
+            "cost_item_analysis": [
+                {
+                    "cost_item_index": 0,
+                    "scope": "LISTING_SPECIFIC",
+                    "confidence": 0.8,
+                    "needs_review": False,
+                    "evidence": [{"raw_text": "初回保証料 総賃料の50%"}],
+                },
+                {
+                    "cost_item_index": 1,
+                    "scope": "LISTING_SPECIFIC",
+                    "confidence": 1.0,
+                    "needs_review": False,
+                    "evidence": [{"raw_text": "家賃 65,000円"}],
+                },
+            ],
+            "all_stations": [
+                {
+                    "line_name": "京浜東北線",
+                    "station_name": "王子駅",
+                    "walk_minutes": 8,
+                    "evidence": [],
+                },
+                {
+                    "line_name": "都電荒川線",
+                    "station_name": "栄町駅",
+                    "walk_minutes": 5,
+                    "evidence": [],
+                },
+            ],
+            "additional_fields": [],
+            "reference_information": [],
+            "validation": {
+                "warnings": [],
+                "unknown_fields": [],
+                "conflicts": [],
+                "checks": {},
+            },
+        },
     }
 
     apply_semantic_checks(data)
 
-    assert data["property"]["deposit"]["value"] is None
-    assert data["property"]["management_fee"]["value"] is None
-    assert data["property"]["contract_period_months"]["value"] is None
-    assert data["cost_items"][0]["amount"] is None
-    assert data["cost_items"][0]["needs_review"] is True
+    assert data["property"]["nearest_station"] == "栄町駅"
+    assert data["property"]["walk_minutes"] == 5
+    assert data["property"]["deposit"] is None
+    assert data["property"]["management_fee"] is None
+    assert data["property"]["contract_period_months"] is None
+    assert len(data["property_cost_items"]) == 1
+    assert data["property_cost_items"][0]["amount"] is None
+    assert data["analysis_details"]["cost_item_analysis"][0]["needs_review"] is True
+
+
+def test_semantic_checks_normalize_paths_and_reject_unsupported_cost_values() -> None:
+    data = {
+        "property": {
+            "rent": 80000,
+            "management_fee": None,
+            "deposit": 80000,
+            "key_money": 80000,
+        },
+        "property_cost_items": [
+            {
+                "raw_name": "初期費用",
+                "display_name": "초기 비용",
+                "amount": 30000,
+                "raw_value": "30,000円",
+                "obligation_status": "REQUIRED",
+                "timing": "INITIAL",
+            },
+            {
+                "raw_name": "解約事務手数料",
+                "display_name": "해약 사무 수수료",
+                "amount": 1500,
+                "raw_value": "15,000円（税別）",
+                "obligation_status": "REQUIRED",
+                "timing": "MOVE_OUT",
+            },
+        ],
+        "analysis_details": {
+            "field_analysis": [
+                {
+                    "field": "rent",
+                    "raw_value": "80,000円",
+                    "confidence": 1.0,
+                    "needs_review": False,
+                    "evidence": [{"raw_text": "賃料80,000円"}],
+                }
+            ],
+            "cost_item_analysis": [
+                {
+                    "cost_item_index": 0,
+                    "scope": "LISTING_SPECIFIC",
+                    "confidence": 1.0,
+                    "needs_review": False,
+                    "evidence": [{"raw_text": "初期費用30,000円"}],
+                },
+                {
+                    "cost_item_index": 1,
+                    "scope": "LISTING_SPECIFIC",
+                    "confidence": 1.0,
+                    "needs_review": False,
+                    "evidence": [
+                        {"raw_text": "退去時に解約事務手数料15,000円が発生します"}
+                    ],
+                },
+            ],
+            "all_stations": [],
+            "reference_information": [],
+            "validation": {
+                "warnings": [],
+                "unknown_fields": [],
+                "conflicts": [],
+                "checks": {},
+            },
+        },
+    }
+
+    apply_semantic_checks(data)
+
+    assert data["analysis_details"]["field_analysis"][0]["field"] == "property.rent"
+    assert data["property_cost_items"][0]["obligation_status"] == "UNKNOWN"
+    assert data["property_cost_items"][1]["amount"] is None
+    assert data["property_cost_items"][1]["obligation_status"] == "REQUIRED"
+    checks = data["analysis_details"]["validation"]["checks"]
+    assert checks["amounts_match_raw_text"] is False
+    assert checks["required_status_has_evidence"] is False
