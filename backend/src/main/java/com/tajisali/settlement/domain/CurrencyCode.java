@@ -1,4 +1,4 @@
-package com.tajisali.settlement.dto;
+package com.tajisali.settlement.domain;
 
 public enum CurrencyCode {
     // 대한민국 원

@@ -2,6 +2,8 @@ package com.tajisali.settlement.dto;
 
 import com.tajisali.common.config.JacksonConfig;
 import com.tajisali.common.response.ApiResponse;
+import com.tajisali.settlement.domain.CostType;
+import com.tajisali.settlement.domain.CurrencyCode;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
