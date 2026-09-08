@@ -4,6 +4,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -802,6 +803,51 @@ def apply_semantic_checks(data: dict) -> None:
     for name, field in data.get("property", {}).items():
         check_extracted_field(f"property.{name}", field)
 
+    # 모델은 원문 추출만 담당한다. 비율·배수·합산·기간 환산으로 만든 값은 제거한다.
+    property_fields = data.get("property", {})
+    calculated_markers = ("%", "ヶ月", "か月", "月分")
+    for name in ("rent", "deposit", "key_money", "listed_initial_cost_total"):
+        field = property_fields.get(name)
+        if not isinstance(field, dict) or field.get("value") is None:
+            continue
+        raw_value = str(field.get("raw_value") or "")
+        if any(marker in raw_value for marker in calculated_markers):
+            field["value"] = None
+            field["needs_review"] = True
+            field_path = f"property.{name}"
+            if field_path not in unknown_fields:
+                unknown_fields.append(field_path)
+            warning = f"AI 계산값을 제거했습니다: property.{name}"
+            if warning not in warnings:
+                warnings.append(warning)
+
+    management_fee = property_fields.get("management_fee")
+    if isinstance(management_fee, dict) and management_fee.get("value") is not None:
+        raw_value = str(management_fee.get("raw_value") or "")
+        explicit_yen_values = re.findall(
+            r"(?:\d[\d,]*\s*(?:円|엔)|\d+(?:\.\d+)?\s*万円)", raw_value
+        )
+        if len(explicit_yen_values) > 1:
+            management_fee["value"] = None
+            management_fee["needs_review"] = True
+            if "property.management_fee" not in unknown_fields:
+                unknown_fields.append("property.management_fee")
+            warning = "관리비와 공익비의 AI 합산값을 제거했습니다."
+            if warning not in warnings:
+                warnings.append(warning)
+
+    contract_period = property_fields.get("contract_period_months")
+    if isinstance(contract_period, dict) and contract_period.get("value") is not None:
+        raw_value = str(contract_period.get("raw_value") or "")
+        if "年" in raw_value and not re.search(r"\d+\s*(?:ヶ月|か月|개월)", raw_value):
+            contract_period["value"] = None
+            contract_period["needs_review"] = True
+            if "property.contract_period_months" not in unknown_fields:
+                unknown_fields.append("property.contract_period_months")
+            warning = "계약기간의 AI 월 환산값을 제거했습니다."
+            if warning not in warnings:
+                warnings.append(warning)
+
     unique_costs = []
     seen_costs = set()
     for index, item in enumerate(data.get("cost_items", [])):
@@ -815,6 +861,12 @@ def apply_semantic_checks(data: dict) -> None:
             item["needs_review"] = True
             item["confidence"] = min(float(confidence or 0), 0.69)
             warning = f"근거가 없는 비용 항목: cost_items[{index}]"
+            if warning not in warnings:
+                warnings.append(warning)
+        if item.get("amount") is not None and item.get("calculation_basis"):
+            item["amount"] = None
+            item["needs_review"] = True
+            warning = f"AI가 계산한 비용 금액을 제거했습니다: cost_items[{index}]"
             if warning not in warnings:
                 warnings.append(warning)
         identity = (

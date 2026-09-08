@@ -7,7 +7,11 @@ from app.core.config import settings
 from app.core.errors import classify_gemini_error
 from app.main import app
 from app.schemas.analysis_output import OUTPUT_SCHEMA
-from gemini_analyze_image import validate_interaction_status, validate_url_context_result
+from gemini_analyze_image import (
+    apply_semantic_checks,
+    validate_interaction_status,
+    validate_url_context_result,
+)
 
 
 client = TestClient(app)
@@ -144,3 +148,52 @@ def test_management_fee_keeps_evidence_and_review_fields() -> None:
         "needs_review",
         "evidence",
     }
+
+
+def test_semantic_checks_remove_model_calculations() -> None:
+    data = {
+        "property": {
+            "deposit": {
+                "value": 65000,
+                "raw_value": "1ヶ月",
+                "confidence": 0.9,
+                "needs_review": False,
+                "evidence": [{"raw_text": "敷金 1ヶ月"}],
+            },
+            "management_fee": {
+                "value": 8000,
+                "raw_value": "管理費 5,000円 / 共益費 3,000円",
+                "confidence": 0.9,
+                "needs_review": False,
+                "evidence": [{"raw_text": "管理費 5,000円 / 共益費 3,000円"}],
+            },
+            "contract_period_months": {
+                "value": 24,
+                "raw_value": "2年",
+                "confidence": 0.9,
+                "needs_review": False,
+                "evidence": [{"raw_text": "契約期間 2年"}],
+            },
+        },
+        "cost_items": [
+            {
+                "raw_name": "保証委託料",
+                "amount": 35000,
+                "raw_value": "総賃料の50%",
+                "calculation_basis": "総賃料 × 50%",
+                "confidence": 0.8,
+                "needs_review": False,
+                "evidence": [{"raw_text": "初回保証料 総賃料の50%"}],
+            }
+        ],
+        "additional_fields": [],
+        "validation": {"warnings": [], "unknown_fields": [], "conflicts": []},
+    }
+
+    apply_semantic_checks(data)
+
+    assert data["property"]["deposit"]["value"] is None
+    assert data["property"]["management_fee"]["value"] is None
+    assert data["property"]["contract_period_months"]["value"] is None
+    assert data["cost_items"][0]["amount"] is None
+    assert data["cost_items"][0]["needs_review"] is True
