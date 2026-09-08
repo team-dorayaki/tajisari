@@ -8,6 +8,7 @@
 - Tailwind CSS 4, shadcn/ui, Radix UI
 - React Router
 - Zustand
+- React Hook Form, Zod
 - Lucide React
 
 ## 실행 방법
@@ -57,8 +58,8 @@ src/
 ## 상태 관리
 
 - 한 컴포넌트 안에서 끝나는 UI 상태는 React 로컬 상태를 사용합니다.
-- 화면 간 공유되는 클라이언트 상태는 Zustand를 사용합니다.
-- 단계형 폼은 해당 기능 구현 시 React Hook Form과 Zod를 도입합니다.
+- 검증이 필요한 복합 폼의 입력값과 유효성 상태는 React Hook Form과 Zod로 관리합니다.
+- 화면 간 공유하거나 폼에서 적용한 저장 전 draft는 Zustand로 관리합니다.
 - 서버 API가 연결되면 서버 상태는 TanStack Query로 분리합니다.
 
 ## 작업 방식
