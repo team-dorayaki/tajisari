@@ -13,7 +13,7 @@ SCHEMA_GUIDANCE = """
 3. 要/必要/必須/加入要/契約時必要처럼 해당 항목에 직접 연결된 문구만 REQUIRED 근거다. 任意/希望者のみ/オプション/選択可처럼 직접 연결된 문구만 OPTIONAL 근거다. 利用可는 문맥이 명확하지 않으면 UNKNOWN이다.
 4. なし/無し/不要/無料/0円/0ヶ月처럼 없음이 명시된 경우만 0이다. 단순 미기재나 판독 불가는 null이며 보이지 않는 비용 행을 만들지 않는다.
 5. 初回/契約時/入居時=INITIAL, 月額/毎月=/月=MONTHLY, 更新時/毎年=RENEWAL, 退去時/解約時=MOVE_OUT이다. 특정 사건 발생 시 부담하는 비용은 CONDITIONAL이며 OPTIONAL과 다르다. 근거가 없으면 UNKNOWN이다.
-6. 금액 범위, 1ヶ月, 50%는 기준이 명확할 때만 계산한다. 賃料, 総賃料, 月額総支払額, 賃料等을 같다고 가정하지 않는다. 포함 항목이 불명확하거나 계산 후보가 둘 이상이면 amount=null, needs_review=true로 두고 raw_value와 calculation_basis만 보존한다.
+6. 어떤 경우에도 금액의 덧셈·곱셈·비율 계산이나 기간 단위 환산을 수행하지 않는다. 1ヶ月, 50%, 금액 범위와 계산식은 raw_value/calculation_basis에만 보존하고 amount=null, needs_review=true로 둔다. amount에는 원문에 엔화 정수 금액이 직접 명시된 경우만 기록한다.
 7. 중복 항목은 합친다. 값이 다르면 시점·플랜·세금·개별조건과 일반안내 차이를 확인한다. 해결되지 않으면 값을 선택하지 말고 null/UNKNOWN 및 conflicts의 resolution=UNKNOWN으로 기록한다.
 8. 증거 우선순위는 개별 특약/비고 > 개별 비용표 > 해당 매물 견적 > 회사 공식정책 > 사이트 일반안내 > 의미 해석이다. 일반적인 일본 부동산 관행은 근거가 아니다.
 9. raw_name/raw_value는 원문 그대로 보존한다. display_name만 의미를 확장하지 않고 번역한다. サービス費를 근거 없이 24시간 서포트비로 바꾸지 않는다.
@@ -26,14 +26,14 @@ SCHEMA_GUIDANCE = """
 
 고정 property 규칙:
 - rent는 기본 월세이며 cost_items에 중복 생성하지 않는다.
-- 管理費와共益費는 현재 management_fee 하나로 합친다. 둘 다 명시되면 정확히 합산하고 raw_value/evidence에 두 원문을 보존한다. 관리비에 포함된 수도·광열비는 중복 생성하지 않는다.
+- 管理費와共益費는 현재 management_fee 하나로 표현한다. 둘 중 하나의 금액만 명시되면 그 직접 표시 금액을 value에 기록한다. 둘 다 별도 금액으로 명시되면 Gemini가 합산하지 말고 value=null, raw_value/evidence에 두 원문을 모두 보존하고 needs_review=true로 둔다. 관리비에 포함된 수도·광열비는 중복 생성하지 않는다.
 - 敷金은 deposit, 礼金은 key_money다. 敷引/償却/保証金을 합치지 말고 별도 항목으로 보존한다.
 - available_from.value는 YYYY-MM-DD로 확정될 때만 기록한다. 即入居可는 value=null, raw_value에 보존하고 additional_fields에도 입주 상태를 남긴다.
-- contract_period_months는 명시된 기간만 월로 환산한다(2年=24). 미기재는 null이다.
+- contract_period_months는 원문에 개월 수가 직접 명시된 경우만 기록한다. 2年을 24개월로 환산하지 말고 value=null, raw_value="2年"으로 보존한다.
 - listed_initial_cost_total은 사이트가 직접 표시한 총액만 기록하며 AI 계산 합계를 넣지 않는다.
 
 비용별 주의:
-- 보증회사: 加入要/利用必은 REQUIRED, 利用可는 REQUIRED가 아니다. 초기·월·연·갱신 보증료는 각각 별도 행으로 만든다. 総賃料의 구성 항목이 불명확하면 비율을 금액으로 계산하지 않는다.
+- 보증회사: 加入要/利用必은 REQUIRED, 利用可는 REQUIRED가 아니다. 초기·월·연·갱신 보증료는 각각 별도 행으로 만든다. 総賃料의 구성이 명확해도 퍼센트 금액은 계산하지 않고 원문 계산식만 추출한다.
 - 보험: 가입 의무, 보험료, 특정 상품 의무를 분리한다. 住宅保険 要는 REQUIRED지만 amount는 null일 수 있다.
 - 중개수수료: 取引態様=仲介만으로 비용을 만들거나 계산하지 않는다.
 - 열쇠/청소/서포트/항균·소독: 금액만으로 필수 또는 선택을 추정하지 않는다. 대상과 시점이 원문명에 있으면 번역에도 보존한다.
@@ -61,8 +61,8 @@ SCHEMA_GUIDANCE = """
 
 COMPACT_URL_PROMPT = """일본 임대 매물 공개 웹페이지를 지정된 JSON 스키마로 분석하세요.
 개별 매물 원문을 최우선으로 하고 일반 관행이나 다른 매물 조건을 사용하지 마세요.
-비용의 금액·의무 여부·발생 시점을 독립 판정하고 계산 기준이 불명확하면 amount=null로 두세요.
-관리비와 공익비는 management_fee로 합치되 각각의 원문 근거를 보존하세요.
+비용의 금액·의무 여부·발생 시점을 독립 판정하세요. 덧셈·곱셈·비율 계산·기간 환산은 하지 말고 원문에 직접 표시된 값만 추출하세요.
+관리비와 공익비는 management_fee로 표현하되 둘 다 별도 금액이면 합산하지 말고 value=null로 두고 각각의 원문 근거를 보존하세요.
 고정 필드 외 비용은 cost_items, 그 밖의 모든 유용한 정보는 additional_fields에 기록하세요.
 명시적 0과 미기재 null을 구분하고, 중복 제거 및 충돌 검사를 수행하세요.
 근거·계산·충돌이 불명확하면 confidence와 관계없이 needs_review=true로 두세요."""
