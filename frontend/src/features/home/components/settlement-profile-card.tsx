@@ -1,5 +1,6 @@
-import { UserRound } from "lucide-react"
 import { Link } from "react-router-dom"
+
+import avatarUrl from "@/assets/default_avatar.png"
 
 const profileValues = [
   { label: "입주 예정", value: "D-42" },
@@ -12,9 +13,7 @@ function SettlementProfileCard() {
   return (
     <section className="rounded-[20px] bg-white p-5" aria-labelledby="settlement-profile-title">
       <div className="flex items-center gap-4 border-b border-[#edf0f2] pb-4">
-        <div className="grid size-14 shrink-0 place-items-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)]">
-          <UserRound aria-hidden="true" className="size-9" strokeWidth={1.8} />
-        </div>
+        <img src={avatarUrl} alt="" aria-hidden="true" className="size-14 shrink-0 rounded-full object-cover" />
         <div className="min-w-0 flex-1">
           <h2 id="settlement-profile-title" className="text-base font-bold">
             나의 정착 프로필
