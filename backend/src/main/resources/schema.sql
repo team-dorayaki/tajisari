@@ -19,6 +19,7 @@ CREATE TABLE property (
     listed_initial_cost_total BIGINT NULL,
     confirmed_initial_cost BIGINT NULL,
     confirmed_monthly_cost BIGINT NULL,
+    priority_rank TINYINT NULL COMMENT '매물 우선순위: 1, 2 / 미선택 NULL',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -36,7 +37,10 @@ CREATE TABLE property (
         AND (confirmed_monthly_cost IS NULL OR confirmed_monthly_cost >= 0)
     ),
     CONSTRAINT chk_property_contract_period
-        CHECK (contract_period_months IS NULL OR contract_period_months > 0)
+        CHECK (contract_period_months IS NULL OR contract_period_months > 0),
+    CONSTRAINT chk_property_priority_rank
+        CHECK (priority_rank IS NULL OR priority_rank IN (1, 2)),
+    CONSTRAINT uk_property_priority_rank UNIQUE (priority_rank)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
