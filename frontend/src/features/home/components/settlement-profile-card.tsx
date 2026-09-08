@@ -21,7 +21,7 @@ function SettlementProfileCard() {
           </h2>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">계획 기준 설정 완료</p>
         </div>
-        <Link to="/my" className="text-xs font-semibold text-[var(--brand)]">
+        <Link to="/my?from=home" className="text-xs font-semibold text-[var(--brand)]">
           수정하기 ›
         </Link>
       </div>
