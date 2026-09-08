@@ -3,10 +3,7 @@ package com.tajisali.settlement.service;
 import com.tajisali.common.exception.BusinessException;
 import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.settlement.domain.*;
-import com.tajisali.settlement.dto.CurrencyTotalsResponse;
-import com.tajisali.settlement.dto.SettlementPlanCostItemRequest;
-import com.tajisali.settlement.dto.SettlementPlanCreateRequest;
-import com.tajisali.settlement.dto.SettlementPlanCreateResponse;
+import com.tajisali.settlement.dto.*;
 import com.tajisali.settlement.repository.SettlementPlanRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -43,6 +41,85 @@ public class SettlementPlanService {
         SettlementPlan savedPlan = settlementPlanRepository.save(settlementPlan);
         return new SettlementPlanCreateResponse(
                 savedPlan.getId(), additionalInitialCostTotals, monthlyLivingCostTotals, "SAVED");
+    }
+
+    // 저장된 계획과 통화별 비용 합계 조회
+    @Transactional(readOnly = true)
+    public SettlementPlanResponse get(Long planId) {
+        return toResponse(findPlan(planId));
+    }
+
+    // 기존 계획의 입력값 전체 수정
+    @Transactional
+    public SettlementPlanResponse update(Long planId, SettlementPlanCreateRequest request) {
+        SettlementPlan settlementPlan = findPlan(planId);
+        validateRequest(request);
+        // 변경 전에 합계 범위까지 검증
+        calculateTotals(request.getAdditionalInitialCosts());
+        calculateTotals(request.getMonthlyLivingCosts());
+
+        settlementPlan.update(
+                request.getMoveInDate(),
+                request.getPlannedStayMonths(),
+                request.getPreparedFunds().getKrw(),
+                request.getPreparedFunds().getJpy(),
+                request.getEmergencyReserve().getKrw(),
+                request.getEmergencyReserve().getJpy(),
+                request.getMonthlyLivingCostInputMethod());
+
+        settlementPlan.clearCostItems();
+        // 같은 카테고리·유형을 다시 넣기 전에 기존 행 삭제
+        settlementPlanRepository.flush();
+        addCostItems(settlementPlan, request.getAdditionalInitialCosts(), CostCategory.INITIAL);
+        addCostItems(settlementPlan, request.getMonthlyLivingCosts(), CostCategory.MONTHLY);
+
+        return toResponse(settlementPlan);
+    }
+
+    private SettlementPlan findPlan(Long planId) {
+        return settlementPlanRepository.findById(planId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_PLAN_NOT_FOUND));
+    }
+
+    private SettlementPlanResponse toResponse(SettlementPlan settlementPlan) {
+        List<SettlementPlanResponse.CostItem> initialCosts = new ArrayList<>();
+        List<SettlementPlanResponse.CostItem> monthlyCosts = new ArrayList<>();
+        long initialKrw = 0;
+        long initialJpy = 0;
+        long monthlyKrw = 0;
+        long monthlyJpy = 0;
+
+        for (SettlementPlanCostItem costItem : settlementPlan.getCostItems()) {
+            var response = new SettlementPlanResponse.CostItem(
+                    costItem.getCostType(), costItem.getAmount(), costItem.getCurrency());
+            if (costItem.getCostCategory() == CostCategory.INITIAL) {
+                initialCosts.add(response);
+                if (costItem.getCurrency() == CurrencyCode.KRW) {
+                    initialKrw = addAmount(initialKrw, costItem.getAmount());
+                } else {
+                    initialJpy = addAmount(initialJpy, costItem.getAmount());
+                }
+            } else {
+                monthlyCosts.add(response);
+                if (costItem.getCurrency() == CurrencyCode.KRW) {
+                    monthlyKrw = addAmount(monthlyKrw, costItem.getAmount());
+                } else {
+                    monthlyJpy = addAmount(monthlyJpy, costItem.getAmount());
+                }
+            }
+        }
+
+        return new SettlementPlanResponse(
+                settlementPlan.getId(),
+                settlementPlan.getMoveInDate(),
+                settlementPlan.getPlannedStayMonths(),
+                new CurrencyTotalsResponse(settlementPlan.getPreparedFundsKrw(), settlementPlan.getPreparedFundsJpy()),
+                new CurrencyTotalsResponse(settlementPlan.getEmergencyReserveKrw(), settlementPlan.getEmergencyReserveJpy()),
+                initialCosts,
+                monthlyCosts,
+                settlementPlan.getMonthlyLivingCostInputMethod(),
+                new CurrencyTotalsResponse(initialKrw, initialJpy),
+                new CurrencyTotalsResponse(monthlyKrw, monthlyJpy));
     }
 
     private void validateRequest(SettlementPlanCreateRequest request) {

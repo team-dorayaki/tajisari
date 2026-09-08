@@ -3,6 +3,7 @@ package com.tajisali.common.exception;
 import com.tajisali.common.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -77,6 +78,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @Override
     protected ResponseEntity<Object> handleHttpMessageNotReadable(
             HttpMessageNotReadableException exception,
+            HttpHeaders headers,
+            HttpStatusCode status,
+            WebRequest request
+    ) {
+        return handleExceptionInternal(
+                exception,
+                ApiResponse.failure(ErrorCode.COMMON_INVALID_REQUEST),
+                headers,
+                status,
+                request
+        );
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleTypeMismatch(
+            TypeMismatchException exception,
             HttpHeaders headers,
             HttpStatusCode status,
             WebRequest request

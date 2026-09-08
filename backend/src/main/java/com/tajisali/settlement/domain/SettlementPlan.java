@@ -101,6 +101,32 @@ public class SettlementPlan {
         this.monthlyLivingCostInputMethod = monthlyLivingCostInputMethod;
     }
 
+    // 정착 계획 기본정보 수정
+    public void update(
+            LocalDate moveInDate,
+            int plannedStayMonths,
+            long preparedFundsKrw,
+            long preparedFundsJpy,
+            long emergencyReserveKrw,
+            long emergencyReserveJpy,
+            MonthlyLivingCostInputMethod monthlyLivingCostInputMethod) {
+        this.moveInDate = moveInDate;
+        this.plannedStayMonths = plannedStayMonths;
+        this.preparedFundsKrw = preparedFundsKrw;
+        this.preparedFundsJpy = preparedFundsJpy;
+        this.emergencyReserveKrw = emergencyReserveKrw;
+        this.emergencyReserveJpy = emergencyReserveJpy;
+        this.monthlyLivingCostInputMethod = monthlyLivingCostInputMethod;
+        // 비용 항목만 변경되어도 계획의 수정일시 갱신
+        updatedAt = LocalDateTime.now(KOREA_ZONE_ID);
+    }
+
+    // 기존 비용 항목 제거
+    public void clearCostItems() {
+        costItems.forEach(costItem -> costItem.setSettlementPlan(null));
+        costItems.clear();
+    }
+
     // 비용 항목 추가
     public void addCostItem(SettlementPlanCostItem costItem) {
         costItems.add(costItem);

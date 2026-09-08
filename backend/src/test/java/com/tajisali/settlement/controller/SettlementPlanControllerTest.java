@@ -10,10 +10,12 @@ import com.tajisali.settlement.domain.MonthlyLivingCostInputMethod;
 import com.tajisali.settlement.dto.CurrencyTotalsResponse;
 import com.tajisali.settlement.dto.SettlementPlanCreateRequest;
 import com.tajisali.settlement.dto.SettlementPlanCreateResponse;
+import com.tajisali.settlement.dto.SettlementPlanResponse;
 import com.tajisali.settlement.service.SettlementPlanService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,12 +27,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -177,6 +182,174 @@ class SettlementPlanControllerTest {
                         "IllegalStateException");
     }
 
+    @Test
+    void 조회는_계획_ID를_전달하고_전체_조회_응답을_반환한다() throws Exception {
+        when(settlementPlanService.get(42L)).thenReturn(planResponse());
+
+        mockMvc.perform(get("/api/settlement-plans/42"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.planId").value(42))
+                .andExpect(jsonPath("$.data.moveInDate").value("2026-10-15"))
+                .andExpect(jsonPath("$.data.plannedStayMonths").value(12))
+                .andExpect(jsonPath("$.data.preparedFunds.krw").value(8_000_000))
+                .andExpect(jsonPath("$.data.preparedFunds.jpy").value(100_000))
+                .andExpect(jsonPath("$.data.emergencyReserve.krw").value(1_000_000))
+                .andExpect(jsonPath("$.data.emergencyReserve.jpy").value(0))
+                .andExpect(jsonPath("$.data.additionalInitialCosts[0].type").value("AIRFARE"))
+                .andExpect(jsonPath("$.data.additionalInitialCosts[0].amount").value(40_000))
+                .andExpect(jsonPath("$.data.additionalInitialCosts[0].currency").value("JPY"))
+                .andExpect(jsonPath("$.data.monthlyLivingCosts[0].type").value("FOOD"))
+                .andExpect(jsonPath("$.data.monthlyLivingCostInputMethod").value("DEFAULT"))
+                .andExpect(jsonPath("$.data.additionalInitialCostTotals.krw").value(0))
+                .andExpect(jsonPath("$.data.additionalInitialCostTotals.jpy").value(40_000))
+                .andExpect(jsonPath("$.data.monthlyLivingCostTotals.krw").value(0))
+                .andExpect(jsonPath("$.data.monthlyLivingCostTotals.jpy").value(40_000))
+                .andExpect(jsonPath("$.error").value((Object) null));
+
+        verify(settlementPlanService).get(42L);
+    }
+
+    @Test
+    void 수정은_계획_ID와_요청을_전달하고_200_응답을_반환한다() throws Exception {
+        when(settlementPlanService.update(eq(42L), any())).thenReturn(planResponse());
+
+        mockMvc.perform(put("/api/settlement-plans/42")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validRequestJson()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.planId").value(42))
+                .andExpect(jsonPath("$.data.moveInDate").value("2026-10-15"))
+                .andExpect(jsonPath("$.data.preparedFunds.krw").value(8_000_000))
+                .andExpect(jsonPath("$.data.monthlyLivingCostInputMethod").value("DEFAULT"))
+                .andExpect(jsonPath("$.data.additionalInitialCosts[0].type").value("AIRFARE"))
+                .andExpect(jsonPath("$.data.monthlyLivingCosts[0].amount").value(40_000))
+                .andExpect(jsonPath("$.data.additionalInitialCostTotals.jpy").value(40_000))
+                .andExpect(jsonPath("$.data.monthlyLivingCostTotals.jpy").value(40_000))
+                .andExpect(jsonPath("$.error").value((Object) null));
+
+        var captor = ArgumentCaptor.forClass(SettlementPlanCreateRequest.class);
+        verify(settlementPlanService).update(eq(42L), captor.capture());
+        var request = captor.getValue();
+        assertThat(request.getMoveInDate()).isEqualTo(LocalDate.of(2026, 10, 15));
+        assertThat(request.getPlannedStayMonths()).isEqualTo(12);
+        assertThat(request.getPreparedFunds().getKrw()).isEqualTo(8_000_000L);
+        assertThat(request.getPreparedFunds().getJpy()).isEqualTo(100_000L);
+        assertThat(request.getEmergencyReserve().getKrw()).isEqualTo(1_000_000L);
+        assertThat(request.getEmergencyReserve().getJpy()).isZero();
+        assertThat(request.getAdditionalInitialCosts().getFirst().getType()).isEqualTo(CostType.AIRFARE);
+        assertThat(request.getAdditionalInitialCosts().getFirst().getAmount()).isEqualTo(40_000L);
+        assertThat(request.getAdditionalInitialCosts().getFirst().getCurrency()).isEqualTo(CurrencyCode.JPY);
+        assertThat(request.getMonthlyLivingCosts().getFirst().getType()).isEqualTo(CostType.FOOD);
+        assertThat(request.getMonthlyLivingCostInputMethod()).isEqualTo(MonthlyLivingCostInputMethod.DEFAULT);
+        verify(settlementPlanService, never()).create(any());
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidInputBodies")
+    void 수정_입력_검증_실패는_공통_입력_오류를_반환한다(String body) throws Exception {
+        mockMvc.perform(put("/api/settlement-plans/42")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        verifyNoInteractions(settlementPlanService);
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidRequestBodies")
+    void 수정_역직렬화_실패는_공통_요청_형식_오류를_반환한다(String body) throws Exception {
+        mockMvc.perform(put("/api/settlement-plans/42")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_REQUEST"));
+
+        verifyNoInteractions(settlementPlanService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"GET", "PUT"})
+    void 없는_계획의_조회와_수정은_공통_404를_반환한다(String method) throws Exception {
+        var exception = new BusinessException(ErrorCode.SETTLEMENT_PLAN_NOT_FOUND);
+        var request = method.equals("GET") ? get("/api/settlement-plans/42") : put("/api/settlement-plans/42");
+        if (method.equals("GET")) {
+            when(settlementPlanService.get(42L)).thenThrow(exception);
+        } else {
+            when(settlementPlanService.update(eq(42L), any())).thenThrow(exception);
+        }
+
+        mockMvc.perform(request.contentType(MediaType.APPLICATION_JSON).content(validRequestJson()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data").value((Object) null))
+                .andExpect(jsonPath("$.error.code").value("SETTLEMENT_PLAN_NOT_FOUND"))
+                .andExpect(jsonPath("$.error.message").value(ErrorCode.SETTLEMENT_PLAN_NOT_FOUND.getMessage()));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "0, COMMON_INVALID_INPUT",
+            "-1, COMMON_INVALID_INPUT",
+            "invalid, COMMON_INVALID_REQUEST",
+            "9223372036854775808, COMMON_INVALID_REQUEST"
+    })
+    void 유효하지_않은_경로_ID는_조회와_수정에서_거부한다(String planId, String code) throws Exception {
+        for (var request : List.of(get("/api/settlement-plans/" + planId), put("/api/settlement-plans/" + planId))) {
+            mockMvc.perform(request.contentType(MediaType.APPLICATION_JSON).content(validRequestJson()))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.success").value(false))
+                    .andExpect(jsonPath("$.data").value((Object) null))
+                    .andExpect(jsonPath("$.error.code").value(code));
+        }
+
+        verifyNoInteractions(settlementPlanService);
+    }
+
+    @Test
+    void 수정의_Service_비즈니스_예외는_공통_오류로_연결한다() throws Exception {
+        when(settlementPlanService.update(eq(42L), any()))
+                .thenThrow(new BusinessException(ErrorCode.SETTLEMENT_PLAN_RESERVE_EXCEEDS_FUNDS));
+
+        mockMvc.perform(put("/api/settlement-plans/42")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validRequestJson()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("SETTLEMENT_PLAN_RESERVE_EXCEEDS_FUNDS"));
+    }
+
+    @Test
+    void 수정의_예상하지_못한_예외는_내부_정보를_노출하지_않는다() throws Exception {
+        when(settlementPlanService.update(eq(42L), any()))
+                .thenThrow(new IllegalStateException("SELECT * FROM private_table"));
+
+        var result = mockMvc.perform(put("/api/settlement-plans/42")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validRequestJson()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data").value((Object) null))
+                .andExpect(jsonPath("$.error.code").value("COMMON_INTERNAL_ERROR"))
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString())
+                .doesNotContain("SELECT", "private_table", "IllegalStateException", "stackTrace");
+    }
+
+    private SettlementPlanResponse planResponse() {
+        return new SettlementPlanResponse(
+                42L, LocalDate.of(2026, 10, 15), 12,
+                new CurrencyTotalsResponse(8_000_000L, 100_000L),
+                new CurrencyTotalsResponse(1_000_000L, 0L),
+                List.of(new SettlementPlanResponse.CostItem(CostType.AIRFARE, 40_000L, CurrencyCode.JPY)),
+                List.of(new SettlementPlanResponse.CostItem(CostType.FOOD, 40_000L, CurrencyCode.JPY)),
+                MonthlyLivingCostInputMethod.DEFAULT,
+                new CurrencyTotalsResponse(0L, 40_000L),
+                new CurrencyTotalsResponse(0L, 40_000L));
+    }
+
     private static Stream<String> invalidInputBodies() {
         return Stream.of(
                 validRequestJson().replace(
@@ -201,6 +374,7 @@ class SettlementPlanControllerTest {
 
     private static Stream<String> invalidRequestBodies() {
         return Stream.of(
+                "{",
                 validRequestJson().replace(
                         "2026-10-15",
                         "not-a-date"),
