@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom"
 
+import objectAssetsUrl from "@/assets/home-object-assets.png"
 import type { HomeStageContent } from "@/features/home/home-data"
 
 type HomeProgressHeroProps = {
@@ -35,13 +36,24 @@ function HomeProgressHero({ content, completed }: HomeProgressHeroProps) {
 
       <span
         aria-hidden="true"
-        className={
-          completed
-            ? "absolute bottom-7 right-5 rotate-[-8deg] text-[78px] leading-none"
-            : "absolute bottom-12 right-3 text-[78px] leading-none"
-        }
+        className={`absolute overflow-hidden ${
+          content.illustration === 2
+            ? "right-[-4px] bottom-4 h-[156px] w-[220px]"
+            : [0, 1, 4].includes(content.illustration)
+              ? completed
+                ? "right-2 bottom-3 h-[104px] w-[156px] rotate-[-8deg]"
+                : "right-2 bottom-7 h-[104px] w-[156px]"
+              : content.illustration === 3
+                ? "right-[-8px] bottom-7 h-[104px] w-[156px]"
+                : "right-[-2px] bottom-7 h-[104px] w-[156px]"
+        }`}
       >
-        {content.illustration}
+        <img
+          src={objectAssetsUrl}
+          alt=""
+          className={`${content.illustration === 2 ? "h-[156px] w-[1170px]" : "h-[104px] w-[780px]"} max-w-none object-contain`}
+          style={{ transform: `translateX(-${content.illustration === 2 ? 430 : content.illustration * 156}px)` }}
+        />
       </span>
 
       {content.progress !== undefined && (

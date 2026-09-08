@@ -22,7 +22,8 @@ function formatKrw(amount: number) {
 }
 
 function getSimulationData({ availableKrw, exchangeRate, initialCost, monthlyHousingCost, monthlyLivingCost, stayMonths }: Omit<PropertyFinancialSimulationProps, "excludedCosts" | "estimatedExitCost">) {
-  const availableFunds = Math.round(availableKrw / exchangeRate)
+  const yenRate = exchangeRate / 100
+  const availableFunds = Math.round(availableKrw / yenRate)
   const laterMonthlyCost = monthlyHousingCost + monthlyLivingCost
   const balanceAfterMoveIn = availableFunds - initialCost
   const usableMonths = Math.max(0, Math.round((balanceAfterMoveIn / Math.max(laterMonthlyCost, 1)) * 10) / 10)
@@ -93,7 +94,7 @@ function PropertyFinancialSimulation({ availableKrw, exchangeRate, initialCost, 
   const simulation = getSimulationData({ availableKrw, exchangeRate, initialCost, monthlyHousingCost, monthlyLivingCost, stayMonths })
   const canCoverTarget = simulation.targetBalance >= 0
   const shortageYen = Math.abs(simulation.targetBalance)
-  const shortageKrw = shortageYen * exchangeRate
+  const shortageKrw = shortageYen * (exchangeRate / 100)
   const timingCosts = [initialCost, simulation.laterMonthlyCost, estimatedExitCost]
   const largestTimingCost = Math.max(...timingCosts, 1)
   const timingBarHeights = timingCosts.map((cost) => `${Math.max((cost / largestTimingCost) * 112, 20)}px`)
@@ -101,7 +102,7 @@ function PropertyFinancialSimulation({ availableKrw, exchangeRate, initialCost, 
   return (
     <div className="bg-[#f5f6f7]">
       <section className="bg-white px-4 pt-7 pb-5">
-        <div className="flex items-center justify-between"><p className="text-xs text-[var(--text-secondary)]">적용 환율</p><span className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1 text-[10px] font-bold text-[var(--brand)]">1 JPY = ₩{exchangeRate.toFixed(1)}</span></div>
+        <div className="flex items-center justify-between"><p className="text-xs text-[var(--text-secondary)]">적용 환율</p><span className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1 text-[10px] font-bold text-[var(--brand)]">100 JPY = ₩{exchangeRate.toLocaleString("ko-KR")}</span></div>
         <div className="mt-6"><p className="text-sm text-[var(--text-secondary)]">현재 자금으로</p><h2 className="mt-1 text-xl font-bold tracking-[-0.03em]">약 <span className="text-[var(--brand)]">{simulation.usableMonths}개월</span> 동안<br />무소득으로 생활할 수 있어요</h2></div>
         <div className="mt-6 flex items-center justify-between text-[11px]"><span className="font-bold text-[var(--brand)]">생활 가능 기간</span><span className="text-[var(--text-secondary)]">예상 체류기간 {stayMonths}개월</span></div>
         <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#dce2e5]"><span className="block h-full rounded-full bg-[var(--brand)]" style={{ width: `${Math.min((simulation.usableMonths / Math.max(stayMonths, 1)) * 100, 100)}%` }} /></div>

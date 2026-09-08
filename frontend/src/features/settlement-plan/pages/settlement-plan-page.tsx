@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { Check } from "lucide-react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import { CurrencyField } from "@/features/settlement-plan/components/currency-field"
 import { PlanStepLayout } from "@/features/settlement-plan/components/plan-step-layout"
@@ -10,6 +10,7 @@ import {
   stayMonthOptions,
 } from "@/features/settlement-plan/settlement-plan-data"
 import { useSettlementPlanStore } from "@/features/settlement-plan/store/settlement-plan-store"
+import { updateSettlementPlan } from "@/features/settlement-plan/api/settlement-plan-api"
 import { parseAmount } from "@/features/settlement-plan/utils/amount"
 import { cn } from "@/lib/utils"
 
@@ -476,11 +477,15 @@ function getCurrentStep(stepParam: string | undefined) {
 function SettlementPlanPage() {
   const navigate = useNavigate()
   const { step } = useParams()
+  const [searchParams] = useSearchParams()
+  const isEditMode = searchParams.get("edit") === "1"
   const currentStep = getCurrentStep(step)
   const moveInDate = useSettlementPlanStore((state) => state.moveInDate)
   const stayMonths = useSettlementPlanStore((state) => state.stayMonths)
   const availableKrw = useSettlementPlanStore((state) => state.availableKrw)
   const availableJpy = useSettlementPlanStore((state) => state.availableJpy)
+  const emergencyKrw = useSettlementPlanStore((state) => state.emergencyKrw)
+  const emergencyJpy = useSettlementPlanStore((state) => state.emergencyJpy)
   const monthlyCosts = useSettlementPlanStore((state) => state.monthlyCosts)
 
   const screens: Record<number, ReactNode> = {
@@ -501,19 +506,38 @@ function SettlementPlanPage() {
     (currentStep === 6 && monthlyTotal <= 0)
 
   const handleBack = () => {
+    if (isEditMode) {
+      void navigate("/my")
+      return
+    }
+
     if (currentStep === 1) {
       void navigate("/home")
       return
     }
-    void navigate(currentStep === 2 ? "/plan" : `/plan/${currentStep - 1}`)
+    const previousPath = currentStep === 2 ? "/plan" : `/plan/${currentStep - 1}`
+    void navigate(previousPath)
   }
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep === TOTAL_STEPS) {
-      void navigate("/home?stage=2")
+      if (isEditMode) {
+        await updateSettlementPlan({
+          moveInDate,
+          stayMonths,
+          availableKrw,
+          availableJpy,
+          emergencyKrw,
+          emergencyJpy,
+          monthlyJpy: Object.values(monthlyCosts).reduce((sum, amount) => sum + amount, 0),
+        })
+        void navigate("/my")
+      } else {
+        void navigate("/home?stage=2")
+      }
       return
     }
-    void navigate(`/plan/${currentStep + 1}`)
+    void navigate(`/plan/${currentStep + 1}${isEditMode ? "?edit=1" : ""}`)
   }
 
   return (
