@@ -2,6 +2,9 @@ package com.tajisali.property.service;
 
 import com.tajisali.common.constants.ExchangeRateConstants;
 import com.tajisali.property.domain.Property;
+import com.tajisali.property.domain.CostTiming;
+import com.tajisali.property.domain.PropertyCostItem;
+import com.tajisali.property.dto.PropertyDetailResponse;
 import com.tajisali.property.dto.PropertyListResponse;
 import com.tajisali.property.repository.PropertyRepository;
 import com.tajisali.property.repository.PropertyAiAnalysisRepository;
@@ -10,6 +13,8 @@ import com.tajisali.settlement.domain.CurrencyCode;
 import com.tajisali.settlement.domain.SettlementPlan;
 import com.tajisali.settlement.domain.SettlementPlanCostItem;
 import com.tajisali.settlement.repository.SettlementPlanRepository;
+import com.tajisali.common.exception.BusinessException;
+import com.tajisali.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +39,104 @@ public class PropertyQueryService {
                 .map(property -> toSummary(property, settlementPlan))
                 .toList();
         return new PropertyListResponse(properties.size(), properties);
+    }
+
+    @Transactional(readOnly = true)
+    public PropertyDetailResponse getPropertyDetail(Long analysisId) {
+        var analysis = propertyAiAnalysisRepository.findDetailById(analysisId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROPERTY_ANALYSIS_NOT_FOUND));
+        Property property = analysis.getProperty();
+        SettlementPlan plan = settlementPlanRepository
+                .findTopByOrderByCreatedAtDesc()
+                .orElse(null);
+
+        long initialCost = valueOrZero(initialCostOf(property));
+        long refundableAmount = valueOrZero(property.getDeposit());
+        long confirmedMonthlyCost = monthlyCostOf(property);
+
+        return new PropertyDetailResponse(
+                property.getId(),
+                analysis.getId(),
+                plan == null ? null : plan.getId(),
+                new PropertyDetailResponse.PropertyInfo(
+                        property.getPropertyName(),
+                        property.getSourceSite(),
+                        property.getSourceUrl(),
+                        property.getPrefecture(),
+                        property.getCity(),
+                        property.getExclusiveAreaM2(),
+                        property.getNearestStation(),
+                        property.getWalkMinutes(),
+                        property.getAvailableFrom(),
+                        property.getContractPeriodMonths(),
+                        property.getPriorityRank()),
+                property.getImages().stream()
+                        .map(image -> image.getStorageKey())
+                        .toList(),
+                new PropertyDetailResponse.CostAnalysis(
+                        property.getRent(),
+                        property.getManagementFee(),
+                        property.getDeposit(),
+                        property.getKeyMoney(),
+                        initialCost,
+                        confirmedMonthlyCost,
+                        refundableAmount,
+                        Math.max(initialCost - refundableAmount, 0L),
+                        property.getCostItems().stream().map(this::toCostItem).toList()),
+                plan == null ? null : createSimulation(property, plan));
+    }
+
+    private PropertyDetailResponse.CostItem toCostItem(PropertyCostItem item) {
+        return new PropertyDetailResponse.CostItem(
+                item.getId(),
+                item.getRawName(),
+                item.getDisplayName(),
+                item.getAmount(),
+                item.getRawValue(),
+                item.getObligationStatus(),
+                item.isIncludedInCalculation(),
+                item.isCalculated() && item.getAmount() != null
+                        && (item.getTiming() == CostTiming.INITIAL
+                        || item.getTiming() == CostTiming.MONTHLY),
+                item.getTiming());
+    }
+
+    private PropertyDetailResponse.Simulation createSimulation(
+            Property property, SettlementPlan plan) {
+        long availableFunds = toJpy(plan.getPreparedFundsKrw() - plan.getEmergencyReserveKrw())
+                .add(BigDecimal.valueOf(plan.getPreparedFundsJpy() - plan.getEmergencyReserveJpy()))
+                .setScale(0, RoundingMode.DOWN)
+                .longValue();
+        long initialCost = valueOrZero(initialCostOf(property))
+                + costItemTotalInJpy(plan, CostCategory.INITIAL)
+                .setScale(0, RoundingMode.DOWN)
+                .longValue();
+        long monthlyHousingCost = monthlyCostOf(property);
+        long monthlyLivingCost = costItemTotalInJpy(plan, CostCategory.MONTHLY)
+                .setScale(0, RoundingMode.DOWN)
+                .longValue();
+        long totalMonthlyCost = monthlyHousingCost + monthlyLivingCost;
+        long balanceAfterMoveIn = availableFunds - initialCost;
+        BigDecimal livingMonths = totalMonthlyCost == 0
+                ? null
+                : BigDecimal.valueOf(Math.max(balanceAfterMoveIn, 0L))
+                .divide(BigDecimal.valueOf(totalMonthlyCost), 1, RoundingMode.DOWN);
+        long balanceAfterPlannedStay = balanceAfterMoveIn
+                - totalMonthlyCost * plan.getPlannedStayMonths();
+
+        return new PropertyDetailResponse.Simulation(
+                new PropertyDetailResponse.ExchangeRate(
+                        100, ExchangeRateConstants.KRW_PER_100_JPY.intValueExact()),
+                availableFunds,
+                initialCost,
+                balanceAfterMoveIn,
+                monthlyHousingCost,
+                monthlyLivingCost,
+                totalMonthlyCost,
+                livingMonths,
+                plan.getPlannedStayMonths(),
+                balanceAfterPlannedStay,
+                Math.max(-balanceAfterPlannedStay, 0L));
     }
 
     private PropertyListResponse.PropertySummary toSummary(

@@ -86,6 +86,10 @@ public class Property {
     @OrderBy("imageOrder ASC")
     private List<PropertyImage> images = new ArrayList<>();
 
+    @OneToMany(mappedBy = "property", fetch = FetchType.LAZY)
+    @OrderBy("id ASC")
+    private List<PropertyCostItem> costItems = new ArrayList<>();
+
     public Property(
             String propertyName,
             Long rent,

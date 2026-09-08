@@ -53,6 +53,8 @@ CREATE TABLE property_cost_item (
     raw_value TEXT NULL COMMENT '예: 1ヶ月, 総賃料50%, 2年20,000円',
     obligation_status VARCHAR(20) NOT NULL DEFAULT 'UNKNOWN'
         COMMENT 'REQUIRED, OPTIONAL, UNKNOWN',
+    is_included_in_calculation BOOLEAN NOT NULL DEFAULT FALSE
+        COMMENT '사용자 선택에 따른 정착비 계산 포함 여부',
     timing VARCHAR(20) NOT NULL DEFAULT 'UNKNOWN'
         COMMENT 'INITIAL, MONTHLY, RENEWAL, MOVE_OUT, CONDITIONAL, UNKNOWN',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

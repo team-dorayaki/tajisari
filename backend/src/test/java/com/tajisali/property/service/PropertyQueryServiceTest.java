@@ -1,6 +1,7 @@
 package com.tajisali.property.service;
 
 import com.tajisali.property.domain.Property;
+import com.tajisali.property.domain.PropertyAiAnalysis;
 import com.tajisali.property.repository.PropertyAiAnalysisRepository;
 import com.tajisali.property.repository.PropertyRepository;
 import com.tajisali.settlement.domain.CostCategory;
@@ -87,5 +88,45 @@ class PropertyQueryServiceTest {
 
         assertThat(response.totalCount()).isZero();
         assertThat(response.properties()).isEmpty();
+    }
+
+    @Test
+    void 분석_ID로_비용과_자금_시뮬레이션이_포함된_상세를_조회한다() {
+        Property property = new Property(
+                "요코하마 스튜디오", 65_000L, 245_000L, 70_000L,
+                1, LocalDateTime.now());
+        ReflectionTestUtils.setField(property, "id", 10L);
+        ReflectionTestUtils.setField(property, "deposit", 65_000L);
+
+        PropertyAiAnalysis analysis = org.springframework.beans.BeanUtils
+                .instantiateClass(PropertyAiAnalysis.class);
+        ReflectionTestUtils.setField(analysis, "id", 1L);
+        ReflectionTestUtils.setField(analysis, "property", property);
+
+        SettlementPlan plan = new SettlementPlan(
+                LocalDate.now().plusMonths(1), 12,
+                8_000_000L, 100_000L, 1_000_000L, 0L,
+                MonthlyLivingCostInputMethod.DEFAULT);
+        ReflectionTestUtils.setField(plan, "id", 7L);
+        plan.addCostItem(new SettlementPlanCostItem(
+                CostCategory.INITIAL, CostType.AIRFARE, 62_000L, CurrencyCode.JPY));
+        plan.addCostItem(new SettlementPlanCostItem(
+                CostCategory.MONTHLY, CostType.FOOD, 115_000L, CurrencyCode.JPY));
+
+        when(propertyAiAnalysisRepository.findDetailById(1L))
+                .thenReturn(Optional.of(analysis));
+        when(settlementPlanRepository.findTopByOrderByCreatedAtDesc())
+                .thenReturn(Optional.of(plan));
+
+        var response = propertyQueryService.getPropertyDetail(1L);
+
+        assertThat(response.propertyId()).isEqualTo(10L);
+        assertThat(response.analysisId()).isEqualTo(1L);
+        assertThat(response.settlementPlanId()).isEqualTo(7L);
+        assertThat(response.costAnalysis().refundableAmount()).isEqualTo(65_000L);
+        assertThat(response.costAnalysis().nonRefundableAmount()).isEqualTo(180_000L);
+        assertThat(response.simulation().exchangeRate().jpy()).isEqualTo(100);
+        assertThat(response.simulation().exchangeRate().krw()).isEqualTo(860);
+        assertThat(response.simulation().livingMonths()).isEqualByComparingTo("3.2");
     }
 }
