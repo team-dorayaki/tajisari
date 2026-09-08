@@ -148,7 +148,7 @@ Invoke-RestMethod `
   "model": "gemini-3.5-flash-lite",
   "result": {
     "analysis_metadata": {
-      "schema_version": "3.0",
+      "schema_version": "3.1",
       "source_type": "IMAGE",
       "image_count": 2
     },
@@ -182,6 +182,7 @@ Invoke-RestMethod `
     "analysis_details": {
       "field_analysis": [],
       "cost_item_analysis": [],
+      "cost_candidates": [],
       "all_stations": [],
       "additional_fields": [],
       "reference_information": [],
@@ -196,7 +197,8 @@ Invoke-RestMethod `
           "fixed_costs_not_duplicated": true,
           "listing_terms_preferred": true,
           "amounts_match_raw_text": true,
-          "required_status_has_evidence": true
+          "required_status_has_evidence": true,
+          "cost_candidates_classified": true
         }
       }
     }
@@ -206,7 +208,7 @@ Invoke-RestMethod `
 
 DB 대응 필드가 `null`이면 미기재 또는 미확인이고, 원문에 `なし`, `不要`, `0円`이 명시된 경우에만 `0`으로 기록합니다. 신뢰도와 근거는 `analysis_details`에 분리되며, 신뢰도가 0.7 미만이거나 근거가 없거나 충돌이 해결되지 않으면 `needs_review`가 `true`가 됩니다.
 
-Gemini는 원문 추출만 담당하며 비율·배수·합산·기간 환산을 수행하지 않습니다. `1ヶ月`, `総賃料の50%`, `2年`처럼 계산이 필요한 표현은 원문으로 보존하고 계산 결과 필드는 `null`로 반환합니다. 대표 역은 도보 시간이 가장 짧은 한 곳만 `property`에 두고 전체 역은 `analysis_details.all_stations`에 보존합니다. 월세·관리비·시키킨·레이킨은 `property`에만 저장하며 가변 비용과 중복하지 않습니다. 회사 일반 안내는 현재 매물에 적용된다는 근거가 없으면 `reference_information`에만 보존합니다.
+Gemini는 원문 추출만 담당하며 비율·배수·합산·기간 환산을 수행하지 않습니다. `1ヶ月`, `総賃料の50%`, `2年`처럼 계산이 필요한 표현은 원문으로 보존하고 계산 결과 필드는 `null`로 반환합니다. 모든 금전 문구는 `cost_candidates`에서 비용명·적용 조건·현재 매물 적용 여부를 먼저 분류합니다. 현재 매물에 직접 또는 조건부로 적용되는 비용만 `property_cost_items`에 저장합니다. 대표 역은 도보 시간이 가장 짧은 한 곳만 `property`에 두고 전체 역은 `analysis_details.all_stations`에 보존합니다. 월세·관리비·시키킨·레이킨은 `property`에만 저장하며 가변 비용과 중복하지 않습니다. 회사 일반 안내는 현재 매물에 적용된다는 근거가 없으면 `reference_information`에만 보존합니다.
 
 오류 응답은 프론트엔드에서 구분할 수 있도록 공통 형식으로 반환합니다.
 

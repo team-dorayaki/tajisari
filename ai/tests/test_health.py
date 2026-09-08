@@ -116,7 +116,7 @@ def test_url_context_failure_statuses_are_classified(
     assert app_error.code == expected_code
 
 
-def test_analysis_output_schema_v3_matches_database_fields() -> None:
+def test_analysis_output_schema_v31_matches_database_fields() -> None:
     properties = OUTPUT_SCHEMA["properties"]
     fixed_fields = properties["property"]["properties"]
 
@@ -127,8 +127,9 @@ def test_analysis_output_schema_v3_matches_database_fields() -> None:
         "analysis_details",
     }
     assert properties["analysis_metadata"]["properties"]["schema_version"]["enum"] == [
-        "3.0"
+        "3.1"
     ]
+    assert "cost_candidates" in properties["analysis_details"]["properties"]
     assert set(fixed_fields) == {
         "source_site",
         "source_url",
@@ -345,8 +346,149 @@ def test_semantic_checks_normalize_paths_and_reject_unsupported_cost_values() ->
 
     assert data["analysis_details"]["field_analysis"][0]["field"] == "property.rent"
     assert data["property_cost_items"][0]["obligation_status"] == "UNKNOWN"
+    assert data["analysis_details"]["cost_item_analysis"][0]["needs_review"] is True
     assert data["property_cost_items"][1]["amount"] is None
     assert data["property_cost_items"][1]["obligation_status"] == "REQUIRED"
     checks = data["analysis_details"]["validation"]["checks"]
     assert checks["amounts_match_raw_text"] is False
     assert checks["required_status_has_evidence"] is False
+
+
+def test_semantic_checks_exclude_cost_not_applied_to_listing() -> None:
+    data = {
+        "property": {},
+        "property_cost_items": [
+            {
+                "raw_name": "サポート費",
+                "display_name": "서포트비",
+                "amount": 15000,
+                "raw_value": "会社一般案内 15,000円",
+                "obligation_status": "UNKNOWN",
+                "timing": "INITIAL",
+            }
+        ],
+        "analysis_details": {
+            "field_analysis": [],
+            "cost_item_analysis": [
+                {
+                    "cost_item_index": 0,
+                    "scope": "LISTING_SPECIFIC",
+                    "confidence": 0.5,
+                    "needs_review": True,
+                    "evidence": [{"raw_text": "会社一般案内 15,000円"}],
+                }
+            ],
+            "cost_candidates": [
+                {
+                    "raw_text": "会社一般案内 15,000円",
+                    "cost_name": "サポート費",
+                    "applicability_condition": None,
+                    "applies_to_listing": "UNKNOWN",
+                    "timing": "INITIAL",
+                    "destination": "PROPERTY_COST_ITEM",
+                    "target_index": 0,
+                    "evidence": [{"raw_text": "会社一般案内 15,000円"}],
+                }
+            ],
+            "all_stations": [],
+            "reference_information": [],
+            "validation": {
+                "warnings": [],
+                "unknown_fields": [],
+                "conflicts": [],
+                "checks": {},
+            },
+        },
+    }
+
+    apply_semantic_checks(data)
+
+    assert data["property_cost_items"] == []
+    candidate = data["analysis_details"]["cost_candidates"][0]
+    assert candidate["destination"] == "REFERENCE_INFORMATION"
+    assert candidate["target_index"] is None
+    assert data["analysis_details"]["validation"]["checks"][
+        "cost_candidates_classified"
+    ] is True
+
+
+def test_semantic_checks_restore_applicable_excluded_cost_candidate() -> None:
+    data = {
+        "property": {},
+        "property_cost_items": [],
+        "analysis_details": {
+            "field_analysis": [],
+            "cost_item_analysis": [],
+            "cost_candidates": [
+                {
+                    "raw_text": "火災保険 2年 13,130円～26,680円",
+                    "cost_name": "火災保険",
+                    "applicability_condition": None,
+                    "applies_to_listing": "YES",
+                    "timing": "CONDITIONAL",
+                    "destination": "EXCLUDED",
+                    "target_index": None,
+                    "evidence": [{"raw_text": "火災保険 2年 13,130円～26,680円"}],
+                }
+            ],
+            "all_stations": [],
+            "reference_information": [],
+            "validation": {
+                "warnings": [], "unknown_fields": [], "conflicts": [], "checks": {}
+            },
+        },
+    }
+
+    apply_semantic_checks(data)
+
+    assert len(data["property_cost_items"]) == 1
+    assert data["property_cost_items"][0]["amount"] is None
+    assert data["property_cost_items"][0]["obligation_status"] == "UNKNOWN"
+    assert data["property_cost_items"][0]["timing"] == "UNKNOWN"
+    assert data["analysis_details"]["cost_item_analysis"][0]["needs_review"] is True
+    candidate = data["analysis_details"]["cost_candidates"][0]
+    assert candidate["destination"] == "PROPERTY_COST_ITEM"
+    assert candidate["target_index"] == 0
+    assert data["analysis_details"]["validation"]["checks"][
+        "cost_candidates_classified"
+    ] is True
+
+
+def test_semantic_checks_split_guarantee_cost_by_timing() -> None:
+    data = {
+        "property": {},
+        "property_cost_items": [],
+        "analysis_details": {
+            "field_analysis": [],
+            "cost_item_analysis": [],
+            "cost_candidates": [
+                {
+                    "raw_text": "利用料の100%～120%(契約時)/10,000円(2年차 이후, 매년)",
+                    "cost_name": "보증 위탁료",
+                    "applicability_condition": "개인 계약만",
+                    "applies_to_listing": "CONDITIONAL",
+                    "timing": "CONDITIONAL",
+                    "destination": "EXCLUDED",
+                    "target_index": None,
+                    "evidence": [
+                        {
+                            "raw_text": "利用料の100%～120%(契約時)/10,000円(2年차 이후, 매년)"
+                        }
+                    ],
+                }
+            ],
+            "all_stations": [],
+            "reference_information": [],
+            "validation": {
+                "warnings": [], "unknown_fields": [], "conflicts": [], "checks": {}
+            },
+        },
+    }
+
+    apply_semantic_checks(data)
+
+    assert [item["timing"] for item in data["property_cost_items"]] == [
+        "INITIAL", "RENEWAL"
+    ]
+    assert [item["amount"] for item in data["property_cost_items"]] == [None, 10000]
+    assert len(data["analysis_details"]["cost_candidates"]) == 2

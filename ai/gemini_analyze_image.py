@@ -6,6 +6,7 @@ import mimetypes
 import os
 import re
 import time
+from copy import deepcopy
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -780,7 +781,13 @@ def encode_image(image_path: Path) -> dict:
 def extract_direct_yen_amounts(raw_value: object) -> set[int]:
     """원문에 직접 표시된 엔화 정수만 추출한다."""
     text = str(raw_value or "").strip()
-    matches = re.findall(r"(\d{1,3}(?:,\d{3})+|\d+)\s*(?:円|엔)", text)
+    number_pattern = r"\d{1,3}(?:,\d{3})+|\d+"
+    matches = [
+        prefix or suffix
+        for prefix, suffix in re.findall(
+            rf"[¥￥]\s*({number_pattern})|({number_pattern})\s*(?:円|엔)", text
+        )
+    ]
     if not matches and re.fullmatch(r"[\d,]+", text):
         matches = [text]
     return {int(value.replace(",", "")) for value in matches}
@@ -807,6 +814,59 @@ def has_required_evidence(item: dict, analysis: dict) -> bool:
             text,
         )
     )
+
+
+def infer_cost_timing(text: str, fallback: str = "UNKNOWN") -> str:
+    """비용 원문의 명시적인 발생 시점만 판정한다."""
+    if re.search(r"退去時|解約時|퇴거\s*시|해약\s*시", text):
+        return "MOVE_OUT"
+    if re.search(r"更新時|毎年|年額|연간|매년|갱신\s*시", text):
+        return "RENEWAL"
+    if re.search(r"月額|毎月|월액|월정액|매월|/月", text):
+        return "MONTHLY"
+    if re.search(r"初回|契約時|입주\s*시|계약\s*시|초기", text):
+        return "INITIAL"
+    if re.search(
+        r"飼育時|利用時|使用時|短期解約|발생\s*시|이용\s*시|사용\s*시|"
+        r"사육\s*시|단기\s*해약",
+        text,
+    ):
+        return "CONDITIONAL"
+    if fallback == "CONDITIONAL":
+        return "UNKNOWN"
+    return fallback
+
+
+def split_compound_cost_candidates(cost_candidates: list[dict]) -> list[dict]:
+    """슬래시로 구분된 서로 다른 시점의 비용 문구를 후보별로 나눈다."""
+    result: list[dict] = []
+    for candidate in cost_candidates:
+        raw_text = str(candidate.get("raw_text") or "")
+        parts = [part.strip() for part in re.split(r"\s*/\s*", raw_text) if part.strip()]
+        timed_parts = [(part, infer_cost_timing(part)) for part in parts]
+        if len(parts) < 2 or sum(timing != "UNKNOWN" for _, timing in timed_parts) < 2:
+            result.append(candidate)
+            continue
+
+        for part, timing in timed_parts:
+            split_candidate = deepcopy(candidate)
+            split_candidate["raw_text"] = part
+            split_candidate["timing"] = timing
+            split_candidate["_replaces_target_index"] = candidate.get("target_index")
+            split_candidate["target_index"] = None
+            for evidence in split_candidate.get("evidence", []):
+                if isinstance(evidence, dict):
+                    evidence["raw_text"] = part
+            result.append(split_candidate)
+    return result
+
+
+def candidate_direct_amount(raw_text: str) -> int | None:
+    """범위·비율·개월 환산이 없는 단일 직접 엔화 금액만 반환한다."""
+    if re.search(r"[%％～〜~]|ヶ月|か月|개월|月分", raw_text):
+        return None
+    amounts = extract_direct_yen_amounts(raw_text)
+    return next(iter(amounts)) if len(amounts) == 1 else None
 
 
 def apply_semantic_checks(data: dict) -> None:
@@ -944,9 +1004,32 @@ def apply_semantic_checks(data: dict) -> None:
         "家賃", "賃料", "월세", "임대료", "管理費", "共益費", "관리비",
         "공익비", "敷金", "시키킹", "시키킨", "礼金", "레이킹", "레이킨",
     }
+    cost_candidates = split_compound_cost_candidates([
+        candidate
+        for candidate in details.setdefault("cost_candidates", [])
+        if isinstance(candidate, dict)
+    ])
+    details["cost_candidates"] = cost_candidates
+    for candidate in cost_candidates:
+        candidate["timing"] = infer_cost_timing(
+            str(candidate.get("raw_text") or ""),
+            str(candidate.get("timing") or "UNKNOWN"),
+        )
+    split_target_indices = {
+        candidate.get("_replaces_target_index")
+        for candidate in cost_candidates
+        if isinstance(candidate.get("_replaces_target_index"), int)
+    }
+    candidates_by_target = {
+        candidate.get("target_index"): candidate
+        for candidate in cost_candidates
+        if candidate.get("destination") == "PROPERTY_COST_ITEM"
+        and isinstance(candidate.get("target_index"), int)
+    }
     unique_costs = []
     unique_analyses = []
     seen_costs = set()
+    cost_index_by_identity = {}
     required_statuses_valid = True
     cost_analyses = {
         item.get("cost_item_index"): item
@@ -956,8 +1039,29 @@ def apply_semantic_checks(data: dict) -> None:
     for old_index, item in enumerate(data.setdefault("property_cost_items", [])):
         if not isinstance(item, dict):
             continue
+        if old_index in split_target_indices:
+            warnings.append(
+                f"여러 발생 시점이 합쳐진 비용을 분리했습니다: "
+                f"property_cost_items[{old_index}]"
+            )
+            continue
         analysis = cost_analyses.get(old_index, {})
+        candidate = candidates_by_target.get(old_index)
+        if candidate and candidate.get("applies_to_listing") not in {
+            "YES",
+            "CONDITIONAL",
+        }:
+            candidate["destination"] = "REFERENCE_INFORMATION"
+            candidate["target_index"] = None
+            warnings.append(
+                f"현재 매물 적용 근거가 없어 비용에서 제외했습니다: "
+                f"property_cost_items[{old_index}]"
+            )
+            continue
         if item.get("raw_name") in fixed_cost_names:
+            if candidate:
+                candidate["destination"] = "PROPERTY"
+                candidate["target_index"] = None
             warnings.append(f"고정 비용 중복을 제거했습니다: {item.get('raw_name')}")
             continue
         confidence = analysis.get("confidence")
@@ -969,6 +1073,9 @@ def apply_semantic_checks(data: dict) -> None:
             analysis["confidence"] = min(float(confidence or 0), 0.69)
             warnings.append(f"근거가 없는 비용 항목: property_cost_items[{old_index}]")
         raw_value = str(item.get("raw_value") or "")
+        item["timing"] = infer_cost_timing(
+            raw_value, str(item.get("timing") or "UNKNOWN")
+        )
         if item.get("amount") is not None and any(
             marker in raw_value for marker in calculated_markers
         ):
@@ -996,6 +1103,12 @@ def apply_semantic_checks(data: dict) -> None:
                     f"property_cost_items[{old_index}]"
                 )
                 required_statuses_valid = False
+        if item.get("obligation_status") == "UNKNOWN":
+            analysis["needs_review"] = True
+            analysis["confidence"] = min(float(analysis.get("confidence") or 0), 0.69)
+        if re.search(r"[～〜~]|または|又は|혹은|또는", raw_value):
+            analysis["needs_review"] = True
+            analysis["confidence"] = min(float(analysis.get("confidence") or 0), 0.69)
         identity = (
             item.get("raw_name"),
             item.get("raw_value"),
@@ -1006,8 +1119,69 @@ def apply_semantic_checks(data: dict) -> None:
             seen_costs.add(identity)
             analysis["cost_item_index"] = len(unique_costs)
             analysis["scope"] = "LISTING_SPECIFIC"
+            cost_index_by_identity[identity] = len(unique_costs)
             unique_costs.append(item)
             unique_analyses.append(analysis)
+            if candidate:
+                candidate["target_index"] = len(unique_costs) - 1
+        elif candidate:
+            candidate["target_index"] = cost_index_by_identity[identity]
+    data["property_cost_items"] = unique_costs
+    details["cost_item_analysis"] = unique_analyses
+    for candidate in cost_candidates:
+        candidate.pop("_replaces_target_index", None)
+
+    # 현재 매물 적용 후보를 모델이 잘못 제외했다면 보수적 기본값으로 복구한다.
+    for candidate in cost_candidates:
+        if candidate.get("applies_to_listing") not in {"YES", "CONDITIONAL"}:
+            continue
+        if candidate.get("destination") == "PROPERTY":
+            continue
+        target_index = candidate.get("target_index")
+        if (
+            candidate.get("destination") == "PROPERTY_COST_ITEM"
+            and isinstance(target_index, int)
+            and 0 <= target_index < len(unique_costs)
+        ):
+            continue
+
+        raw_name = str(candidate.get("cost_name") or "").strip()
+        raw_text = str(candidate.get("raw_text") or "").strip()
+        if not raw_name or not raw_text or raw_name in fixed_cost_names:
+            continue
+
+        item = {
+            "raw_name": raw_name,
+            "display_name": str(candidate.get("display_name") or raw_name),
+            "amount": candidate_direct_amount(raw_text),
+            "raw_value": raw_text,
+            "obligation_status": "UNKNOWN",
+            "timing": infer_cost_timing(
+                raw_text, str(candidate.get("timing") or "UNKNOWN")
+            ),
+        }
+        identity = (
+            item["raw_name"], item["raw_value"], item["timing"], item["amount"]
+        )
+        if identity in cost_index_by_identity:
+            new_index = cost_index_by_identity[identity]
+        else:
+            new_index = len(unique_costs)
+            cost_index_by_identity[identity] = new_index
+            unique_costs.append(item)
+            unique_analyses.append(
+                {
+                    "cost_item_index": new_index,
+                    "scope": "LISTING_SPECIFIC",
+                    "confidence": 0.69,
+                    "needs_review": True,
+                    "evidence": candidate.get("evidence", []),
+                }
+            )
+        candidate["destination"] = "PROPERTY_COST_ITEM"
+        candidate["target_index"] = new_index
+        warnings.append(f"현재 매물 적용 비용 후보를 복구했습니다: {raw_name}")
+
     data["property_cost_items"] = unique_costs
     details["cost_item_analysis"] = unique_analyses
 
@@ -1029,6 +1203,42 @@ def apply_semantic_checks(data: dict) -> None:
     checks["listing_terms_preferred"] = True
     checks["amounts_match_raw_text"] = amount_fields_match
     checks["required_status_has_evidence"] = required_statuses_valid
+    additional_costs_complete = True
+    candidate_amounts = set().union(
+        *(extract_direct_yen_amounts(candidate.get("raw_text")) for candidate in cost_candidates)
+    ) if cost_candidates else set()
+    for additional in details.setdefault("additional_fields", []):
+        if not isinstance(additional, dict):
+            continue
+        raw_text = str(additional.get("raw_value") or additional.get("value") or "")
+        amounts = extract_direct_yen_amounts(raw_text)
+        if amounts and not amounts.intersection(candidate_amounts):
+            additional_costs_complete = False
+            warnings.append(
+                f"additional_fields의 금전 문구가 비용 후보에 없습니다: "
+                f"{additional.get('raw_name')}"
+            )
+
+    checks["cost_candidates_classified"] = additional_costs_complete and all(
+        (
+            candidate.get("applies_to_listing") in {"YES", "CONDITIONAL"}
+            and candidate.get("destination") in {"PROPERTY", "PROPERTY_COST_ITEM"}
+            and (
+                candidate.get("destination") == "PROPERTY"
+                or (
+                    isinstance(candidate.get("target_index"), int)
+                    and 0 <= candidate["target_index"] < len(unique_costs)
+                )
+            )
+        )
+        or (
+            candidate.get("applies_to_listing") in {"NO", "UNKNOWN"}
+            and candidate.get("destination")
+            in {"REFERENCE_INFORMATION", "EXCLUDED"}
+            and candidate.get("target_index") is None
+        )
+        for candidate in cost_candidates
+    )
 
 
 def validate_analysis_json(
@@ -1073,7 +1283,7 @@ def validate_analysis_json(
             )
 
     metadata = data.get("analysis_metadata", {})
-    metadata["schema_version"] = "3.0"
+    metadata["schema_version"] = "3.1"
     metadata["source_type"] = source_type
     metadata["image_count"] = image_count
     data.get("property", {})["source_url"] = source_url
