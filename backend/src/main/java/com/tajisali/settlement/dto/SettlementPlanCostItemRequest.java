@@ -1,7 +1,5 @@
 package com.tajisali.settlement.dto;
 
-import com.tajisali.settlement.entity.CostType;
-import com.tajisali.settlement.entity.CurrencyCode;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AllArgsConstructor;
