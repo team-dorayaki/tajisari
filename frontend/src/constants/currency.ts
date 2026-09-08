@@ -1,0 +1,3 @@
+const JPY_TO_KRW_EXCHANGE_RATE = 9.2
+
+export { JPY_TO_KRW_EXCHANGE_RATE }
