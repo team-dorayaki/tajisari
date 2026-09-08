@@ -27,7 +27,7 @@ function createMockRoomImage(label: string, wall: string, floor: string, accent:
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
-const mockProperties: PropertySummary[] = [
+let mockProperties: PropertySummary[] = [
   {
     id: "shinjuku-room-a",
     name: "신주쿠 원룸 A",
@@ -67,19 +67,41 @@ const mockProperties: PropertySummary[] = [
   },
 ]
 
-function waitForMockResponse() {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, 150))
+type MockFailureStage = "list" | "delete"
+
+function waitForMockResponse(delay = 300) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, delay))
+}
+
+function consumeMockFailure(stage: MockFailureStage) {
+  if (!import.meta.env.DEV || typeof window === "undefined") return
+
+  const url = new URL(window.location.href)
+  if (url.searchParams.get("mockApiFailure") !== stage) return
+
+  url.searchParams.delete("mockApiFailure")
+  window.history.replaceState(window.history.state, "", url)
+  throw new Error(`Mock ${stage} failure`)
 }
 
 async function fetchProperties(): Promise<PropertySummary[]> {
   await waitForMockResponse()
-  return mockProperties
+  consumeMockFailure("list")
+  return structuredClone(mockProperties)
 }
 
 async function fetchProperty(propertyId: string): Promise<PropertySummary | null> {
   await waitForMockResponse()
-  return mockProperties.find((property) => property.id === propertyId) ?? null
+  const property = mockProperties.find((item) => item.id === propertyId)
+  return property ? structuredClone(property) : null
 }
 
-export { fetchProperties, fetchProperty }
+async function deleteProperties(propertyIds: string[]): Promise<void> {
+  await waitForMockResponse(500)
+  consumeMockFailure("delete")
+  const ids = new Set(propertyIds)
+  mockProperties = mockProperties.filter((property) => !ids.has(property.id))
+}
+
+export { deleteProperties, fetchProperties, fetchProperty }
 export type { ExcludedCost, PropertyImage, PropertySummary }
