@@ -35,7 +35,7 @@ let mockProperties: PropertySummary[] = [
     moveInDate: "2026-10-15",
     rent: 78_000,
     managementFee: 6_000,
-    initialCost: 413_800,
+    initialCost: 326_000,
     livingMonths: "4.2개월",
     excludedCosts: [
       { label: "화재보험료", category: "계약·입주 시" },
@@ -65,9 +65,72 @@ let mockProperties: PropertySummary[] = [
       { id: "yokohama-3", src: createMockRoomImage("욕실", "#eff1f4", "#d6d1ca", "#5b718b"), alt: "요코하마 스튜디오 욕실" },
     ],
   },
+  {
+    id: "osaka-room-b",
+    name: "오사카 원룸 B",
+    area: "오사카부 오사카",
+    moveInDate: "2026-10-20",
+    rent: 59_000,
+    managementFee: 6_000,
+    initialCost: 268_000,
+    livingMonths: "4.8개월",
+    excludedCosts: [
+      { label: "보증회사 이용료", category: "계약·입주 시" },
+      { label: "수도요금", category: "매월 반복비용" },
+    ],
+    images: [
+      { id: "osaka-1", src: createMockRoomImage("원룸", "#f0ede8", "#d8cfc2", "#786657"), alt: "오사카 원룸 B 거실" },
+      { id: "osaka-2", src: createMockRoomImage("주방", "#eeece7", "#d7cfc4", "#6e7773"), alt: "오사카 원룸 B 주방" },
+      { id: "osaka-3", src: createMockRoomImage("창가", "#eceff0", "#d3cbc0", "#546c78"), alt: "오사카 원룸 B 창가" },
+    ],
+  },
 ]
 
-type MockFailureStage = "list" | "delete"
+type PropertyComparison = {
+  propertyId: string
+  monthlyHousingCost: number
+  initialSettlementCost: number
+  balanceAfterMoveIn: number
+  livingMonths: number
+  refundableDeposit: number
+  nonRefundableCost: number
+  notes: string[]
+}
+
+const mockPropertyComparisons: PropertyComparison[] = [
+  {
+    propertyId: "shinjuku-room-a",
+    monthlyHousingCost: 84_000,
+    initialSettlementCost: 348_000,
+    balanceAfterMoveIn: 5_040_000,
+    livingMonths: 4.2,
+    refundableDeposit: 78_000,
+    nonRefundableCost: 248_000,
+    notes: ["역에서 도보 6분", "관리비 포함 월 비용이 가장 높아요"],
+  },
+  {
+    propertyId: "yokohama-studio",
+    monthlyHousingCost: 71_000,
+    initialSettlementCost: 245_000,
+    balanceAfterMoveIn: 5_790_000,
+    livingMonths: 5.1,
+    refundableDeposit: 78_000,
+    nonRefundableCost: 167_000,
+    notes: ["초기 정산 비용이 가장 낮아요", "생활 가능 기간이 가장 길어요"],
+  },
+  {
+    propertyId: "osaka-room-b",
+    monthlyHousingCost: 65_000,
+    initialSettlementCost: 268_000,
+    balanceAfterMoveIn: 5_580_000,
+    livingMonths: 4.8,
+    refundableDeposit: 78_000,
+    nonRefundableCost: 190_000,
+    notes: ["월 비용이 가장 낮아요", "이동 거리와 생활권을 확인해보세요"],
+  },
+]
+
+type MockFailureStage = "list" | "delete" | "compare"
 
 function waitForMockResponse(delay = 300) {
   return new Promise((resolve) => globalThis.setTimeout(resolve, delay))
@@ -103,5 +166,15 @@ async function deleteProperties(propertyIds: string[]): Promise<void> {
   mockProperties = mockProperties.filter((property) => !ids.has(property.id))
 }
 
-export { deleteProperties, fetchProperties, fetchProperty }
-export type { ExcludedCost, PropertyImage, PropertySummary }
+async function fetchPropertyComparisons(propertyIds: string[]): Promise<PropertyComparison[]> {
+  await waitForMockResponse()
+  consumeMockFailure("compare")
+  const comparisonById = new Map(mockPropertyComparisons.map((comparison) => [comparison.propertyId, comparison]))
+  return propertyIds.flatMap((propertyId) => {
+    const comparison = comparisonById.get(propertyId)
+    return comparison ? [structuredClone(comparison)] : []
+  })
+}
+
+export { deleteProperties, fetchProperties, fetchProperty, fetchPropertyComparisons }
+export type { ExcludedCost, PropertyComparison, PropertyImage, PropertySummary }
