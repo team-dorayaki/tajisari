@@ -17,12 +17,14 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 10MB
+      max-file-size: 15MB
       max-request-size: 50MB
 
 external:
   ai:
     base-url: ${AI_BASE_URL:http://localhost:8000}
+    connect-timeout: ${AI_CONNECT_TIMEOUT:2s}
+    read-timeout: ${AI_READ_TIMEOUT:15s}
   exchange:
     base-url: ${EXCHANGE_API_BASE_URL:}
     api-key: ${EXCHANGE_API_KEY:}
