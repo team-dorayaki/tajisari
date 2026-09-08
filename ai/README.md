@@ -162,6 +162,7 @@ Invoke-RestMethod `
 ```
 
 - `400`: 이미지 형식 또는 입력값 오류
+- `403`: URL Context 유료벽 또는 안전 정책 차단
 - `413`: 이미지 개수 또는 용량 제한 초과
 - `422`: URL 등 요청 형식 오류
 - `429`: Gemini 요청 한도 초과
@@ -170,6 +171,8 @@ Invoke-RestMethod `
 - `504`: Gemini 응답 시간 초과
 
 오류 응답의 `request_id`는 응답 헤더의 `X-Request-ID` 및 서버 로그의 요청 ID와 같습니다. `retryable`이 `true`이면 잠시 후 같은 요청을 다시 시도할 수 있습니다.
+
+Interactions API의 상태가 `incomplete` 또는 `budget_exceeded`이면 `GEMINI_RESPONSE_TRUNCATED`로 처리합니다. URL Context가 제공하는 `error`, `paywall`, `unsafe` 상태도 각각 구분합니다. 일반 로그인 페이지는 Gemini가 별도의 상태를 제공하지 않으므로 확정 판정하지 않습니다.
 
 ## 테스트
 
