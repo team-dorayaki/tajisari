@@ -414,6 +414,19 @@ base_monthly_total_yen에는 확정된 정액 월 비용만 합산한다.
 웹페이지 분석이므로 analysis_metadata.image_count는 0이고 source_image_index는 null이다.
 응답은 지정된 스키마의 JSON 객체 하나만 출력한다."""
 
+# REST API에서 사용하는 v2 출력 스키마와 보수적 판독 프롬프트입니다.
+# 위 정의는 이전 CLI 응답을 이해하기 위한 참고용으로 남겨두고 실행 시 v2를 사용합니다.
+from app.prompts.image_analysis import (  # noqa: E402
+    COMPACT_URL_PROMPT,
+    DEFAULT_PROMPT,
+    SCHEMA_GUIDANCE,
+)
+from app.schemas.analysis_output import (  # noqa: E402
+    OUTPUT_SCHEMA,
+    REQUIRED_NESTED_FIELDS,
+    REQUIRED_SECTIONS,
+)
+
 
 def parse_args() -> argparse.Namespace:
     # 모델 arg 설정
@@ -482,6 +495,9 @@ def analyze_webpage(url: str, prompt: str, model: str) -> str:
         interaction.output_text,
         provider="Gemini",
         debug_info=f"status={getattr(interaction, 'status', None)}",
+        source_type="URL",
+        source_url=url,
+        image_count=0,
     )
     logger.info("URL 분석 전체 처리 duration=%.2fs", time.perf_counter() - total_started)
     return result
@@ -735,6 +751,9 @@ def analyze_images(image_paths: list[Path], prompt: str, model: str) -> str:
             f"status={getattr(interaction, 'status', None)}, "
             f"usage={getattr(interaction, 'usage', None)}"
         ),
+        source_type="IMAGE",
+        source_url=None,
+        image_count=len(resolved_paths),
     )
     validation_seconds = time.perf_counter() - validation_started
     total_seconds = time.perf_counter() - total_started
@@ -758,81 +777,85 @@ def encode_image(image_path: Path) -> dict:
 
 
 def apply_semantic_checks(data: dict) -> None:
-    """모델 응답의 계산값, 출처와 영역 간 관계를 결정적으로 검증한다."""
-    assessment = data.get("assessment", {})
-    warnings = assessment.setdefault("warnings", [])
-    issues = []
+    """v2 결과에서 근거, 신뢰도, 중복과 미확인 상태를 결정적으로 검증한다."""
+    validation = data.setdefault("validation", {})
+    warnings = validation.setdefault("warnings", [])
+    unknown_fields = validation.setdefault("unknown_fields", [])
 
-    location = data.get("location", {})
-    agency = data.get("agency", {})
-    if location.get("postal_code") and location.get("postal_code") == agency.get("postal_code"):
-        location["postal_code"] = None
-        issues.append("매물과 회사 우편번호가 같아 매물 우편번호를 null로 보정했습니다.")
+    def check_extracted_field(field_path: str, field: object) -> None:
+        if not isinstance(field, dict):
+            return
+        confidence = field.get("confidence")
+        evidence = field.get("evidence")
+        value = field.get("value")
+        if isinstance(confidence, (int, float)) and confidence < 0.7:
+            field["needs_review"] = True
+        if value is not None and not evidence:
+            field["needs_review"] = True
+            field["confidence"] = min(float(confidence or 0), 0.69)
+            warning = f"근거가 없는 확정값: {field_path}"
+            if warning not in warnings:
+                warnings.append(warning)
+        if value is None and field_path not in unknown_fields:
+            unknown_fields.append(field_path)
 
-    metadata = data.get("analysis_metadata", {})
-    room_number = str(data.get("property", {}).get("room_number") or "")
-    floor = str(data.get("property", {}).get("floor") or "")
-    conflicts = metadata.get("conflicts")
-    if room_number and floor and isinstance(conflicts, list):
-        filtered = [
-            conflict for conflict in conflicts
-            if not (room_number in str(conflict) and floor in str(conflict))
-        ]
-        if len(filtered) != len(conflicts):
-            metadata["conflicts"] = filtered
-            issues.append("호실 번호와 실제 층수를 충돌로 본 항목을 제거했습니다.")
-    if metadata.get("conflicts") and metadata.get("cross_image_consistency") == "consistent":
-        metadata["cross_image_consistency"] = "conflict"
-        issues.append("conflicts가 존재하여 cross_image_consistency를 conflict로 보정했습니다.")
+    for name, field in data.get("property", {}).items():
+        check_extracted_field(f"property.{name}", field)
 
-    pricing = data.get("pricing", {})
-    fixed_amounts = []
-    fixed_known = True
-    for key in ("rent", "management_fee", "common_service_fee"):
-        cost = pricing.get(key)
-        amount = cost.get("amount_yen") if isinstance(cost, dict) else None
-        if amount is None:
-            if key == "common_service_fee":
-                amount = 0
-            else:
-                fixed_known = False
-        if isinstance(amount, int):
-            fixed_amounts.append(amount)
-    if fixed_known:
-        calculated_total = sum(fixed_amounts)
-        if pricing.get("base_monthly_total_yen") != calculated_total:
-            pricing["base_monthly_total_yen"] = calculated_total
-            issues.append("월세·관리비·공익비로 base_monthly_total_yen을 다시 계산했습니다.")
+    unique_costs = []
+    seen_costs = set()
+    for index, item in enumerate(data.get("cost_items", [])):
+        if not isinstance(item, dict):
+            continue
+        confidence = item.get("confidence")
+        evidence = item.get("evidence")
+        if isinstance(confidence, (int, float)) and confidence < 0.7:
+            item["needs_review"] = True
+        if not evidence:
+            item["needs_review"] = True
+            item["confidence"] = min(float(confidence or 0), 0.69)
+            warning = f"근거가 없는 비용 항목: cost_items[{index}]"
+            if warning not in warnings:
+                warnings.append(warning)
+        identity = (
+            item.get("raw_name"),
+            item.get("raw_value"),
+            item.get("timing"),
+            item.get("amount"),
+        )
+        if identity not in seen_costs:
+            seen_costs.add(identity)
+            unique_costs.append(item)
+    if len(unique_costs) != len(data.get("cost_items", [])):
+        data["cost_items"] = unique_costs
+        warnings.append("완전히 동일한 비용 항목의 중복을 제거했습니다.")
 
-    variable_costs = pricing.setdefault("variable_monthly_costs", [])
-    for term in data.get("contract", {}).get("guarantee_fee_terms", []):
-        frequency = str(term.get("frequency") or "").lower()
-        if ("월" in frequency or "month" in frequency) and term not in variable_costs:
-            variable_costs.append(term.copy())
-            issues.append("월 단위 보증료를 variable_monthly_costs에 반영했습니다.")
+    for index, field in enumerate(data.get("additional_fields", [])):
+        check_extracted_field(f"additional_fields[{index}]", field)
 
-    evidence_fields = {
-        item.get("field") for item in data.get("source_evidence", [])
-        if isinstance(item, dict)
+    unresolved_fields = {
+        conflict.get("field")
+        for conflict in validation.get("conflicts", [])
+        if isinstance(conflict, dict) and conflict.get("resolution") == "UNKNOWN"
     }
-    required_evidence = {
-        "property.property_name_jp",
-        "location.address_raw",
-        "pricing.rent.amount_yen",
-        "pricing.management_fee.amount_yen",
-    }
-    missing_evidence = sorted(required_evidence - evidence_fields)
-    if missing_evidence:
-        issues.append("핵심 값의 source_evidence 누락: " + ", ".join(missing_evidence))
+    for field_path in unresolved_fields:
+        if field_path and field_path not in unknown_fields:
+            unknown_fields.append(field_path)
 
-    if issues:
-        warnings.extend(issue for issue in issues if issue not in warnings)
-        confidence = assessment.get("confidence")
-        if isinstance(confidence, dict) and confidence.get("overall") == "high":
-            confidence["overall"] = "medium"
+    checks = validation.setdefault("checks", {})
+    checks["evidence_only"] = not any("근거가 없는" in item for item in warnings)
+    checks["duplicates_removed"] = True
+    checks["conflicts_reviewed"] = not bool(unresolved_fields)
 
 
-def validate_analysis_json(result: str, provider: str, debug_info: str) -> str:
+def validate_analysis_json(
+    result: str,
+    provider: str,
+    debug_info: str,
+    source_type: str,
+    source_url: str | None,
+    image_count: int,
+) -> str:
     """응답 JSON과 필수 영역을 검사하고 보기 좋게 정렬한다."""
     try:
         data = json.loads(result)
@@ -865,6 +888,12 @@ def validate_analysis_json(result: str, provider: str, debug_info: str) -> str:
                 f"{provider} 응답의 {section} 영역에 필수 필드가 없습니다: "
                 f"{missing_fields}. {debug_info}"
             )
+
+    metadata = data.get("analysis_metadata", {})
+    metadata["schema_version"] = "2.0"
+    metadata["source_type"] = source_type
+    metadata["source_url"] = source_url
+    metadata["image_count"] = image_count
 
     apply_semantic_checks(data)
 
