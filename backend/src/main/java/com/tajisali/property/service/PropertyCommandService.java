@@ -5,6 +5,7 @@ import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.property.domain.Property;
 import com.tajisali.property.domain.PropertyAiAnalysis;
 import com.tajisali.property.domain.PropertyCostItem;
+import com.tajisali.property.domain.PropertyImage;
 import com.tajisali.property.dto.PropertyConfirmRequest;
 import com.tajisali.property.dto.PropertyConfirmResponse;
 import com.tajisali.property.dto.PropertyPriorityUpdateRequest;
@@ -18,6 +19,7 @@ import com.tajisali.user.service.AnonymousUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -34,6 +36,7 @@ public class PropertyCommandService {
     private final PropertyCostItemRepository propertyCostItemRepository;
     private final AnonymousUserService anonymousUserService;
     private final PropertyCostCalculationService propertyCostCalculationService;
+    private final PropertyImageStorageService propertyImageStorageService;
 
     @Transactional
     public PropertyConfirmResult confirmUrl(PropertyConfirmRequest request, String userKey) {
@@ -65,6 +68,50 @@ public class PropertyCommandService {
                 request.rawResult().toString(),
                 request.modelVersion(),
                 createdAt));
+
+        return new PropertyConfirmResult(
+                new PropertyConfirmResponse(savedProperty.getId()), user.getUserKey());
+    }
+
+    @Transactional
+    public PropertyConfirmResult confirmImages(
+            PropertyConfirmRequest request,
+            List<MultipartFile> files,
+            String userKey) {
+        User user = anonymousUserService.resolveOrCreate(userKey);
+        LocalDateTime createdAt = LocalDateTime.now();
+        Property property = createProperty(user, request, createdAt);
+        List<PropertyCostItem> costItems = createCostItems(property, request, createdAt);
+        property.addCostItems(costItems);
+        PropertyCostCalculationResult costCalculation = propertyCostCalculationService.calculate(property);
+        property.confirmCosts(costCalculation.initialCost(), costCalculation.monthlyCost());
+
+        Property savedProperty = propertyRepository.save(property);
+        List<PropertyImageStorageService.StoredImage> storedImages = List.of();
+        try {
+            storedImages = propertyImageStorageService.save(savedProperty.getId(), files);
+            List<PropertyImage> images = storedImages.stream()
+                    .map(image -> new PropertyImage(
+                            savedProperty,
+                            image.storageKey(),
+                            image.imageOrder(),
+                            image.originalFilename(),
+                            createdAt))
+                    .toList();
+
+            propertyImageRepository.saveAll(images);
+            propertyCostItemRepository.saveAll(costItems);
+            propertyAiAnalysisRepository.save(new PropertyAiAnalysis(
+                    savedProperty,
+                    request.sourceType().name(),
+                    request.rawResult().toString(),
+                    request.modelVersion(),
+                    createdAt));
+            propertyRepository.flush();
+        } catch (RuntimeException exception) {
+            propertyImageStorageService.cleanUp(storedImages);
+            throw exception;
+        }
 
         return new PropertyConfirmResult(
                 new PropertyConfirmResponse(savedProperty.getId()), user.getUserKey());
@@ -138,6 +185,24 @@ public class PropertyCommandService {
                 property.contractPeriodMonths(),
                 property.listedInitialCostTotal(),
                 createdAt);
+    }
+
+    private List<PropertyCostItem> createCostItems(
+            Property property,
+            PropertyConfirmRequest request,
+            LocalDateTime createdAt) {
+        return request.propertyCostItems().stream()
+                .map(costItem -> new PropertyCostItem(
+                        property,
+                        costItem.rawName(),
+                        costItem.displayName(),
+                        costItem.amount(),
+                        costItem.rawValue(),
+                        costItem.obligationStatus(),
+                        costItem.includedInCalculation(),
+                        costItem.timing(),
+                        createdAt))
+                .toList();
     }
 
     private Property findOwnedProperty(Long propertyId, Long userId) {

@@ -26,6 +26,7 @@ ai/logs/*
 # Temporary files
 tmp/
 temp/
+uploads/
 
 # Python / AI
 __pycache__/
