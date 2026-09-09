@@ -4,6 +4,7 @@ import com.tajisali.common.config.JacksonConfig;
 import com.tajisali.common.exception.GlobalExceptionHandler;
 import com.tajisali.property.dto.PropertyListResponse;
 import com.tajisali.property.dto.PropertyDetailResponse;
+import com.tajisali.property.service.PropertyCommandService;
 import com.tajisali.property.service.PropertyQueryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,7 @@ import jakarta.servlet.http.Cookie;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -33,6 +35,9 @@ class PropertyControllerTest {
 
     @MockitoBean
     private PropertyQueryService propertyQueryService;
+
+    @MockitoBean
+    private PropertyCommandService propertyCommandService;
 
     @Test
     void 매물_목록과_화면용_요약정보를_반환한다() throws Exception {
@@ -93,5 +98,13 @@ class PropertyControllerTest {
                 .andExpect(jsonPath("$.data.simulation.livingMonths").value(3.2));
 
         verify(propertyQueryService).getPropertyDetail(10L, USER_KEY);
+    }
+
+    @Test
+    void 매물_ID로_저장된_매물을_삭제한다() throws Exception {
+        mockMvc.perform(delete("/api/properties/10"))
+                .andExpect(status().isNoContent());
+
+        verify(propertyCommandService).deleteProperty(10L);
     }
 }
