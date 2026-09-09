@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom"
 
-import objectAssetsUrl from "@/assets/home-object-assets.png"
+import objectAssetsUrl from "@/features/home/assets/home-object-assets.png"
 import type { HomeStageContent } from "@/features/home/home-data"
 
 type HomeProgressHeroProps = {

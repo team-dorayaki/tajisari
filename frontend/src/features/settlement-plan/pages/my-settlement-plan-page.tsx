@@ -100,7 +100,7 @@ function MySettlementPlanPage() {
             </PlanCard>
             <PlanCard title="월 생활비" step={6}>
               <PlanRow label="월 합계" value={formatJpy(plan.monthlyJpy)} />
-              <PlanRow label="입력 방식" value="기본값 적용 · 아직 확인 전" accent />
+              <PlanRow label="입력 방식" value={plan.monthlyInputMode === "default" ? "기본값 적용" : "직접 입력"} accent={plan.monthlyInputMode === "default"} />
             </PlanCard>
             <section className="rounded-[20px] bg-white px-5 py-5">
               <div className="mb-4 flex items-center justify-between">
