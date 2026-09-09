@@ -15,11 +15,11 @@ public class AnonymousUserService {
     private final UserRepository userRepository;
 
     public User resolveOrCreate(String userKey) {
-        return findExistingUser(userKey)
+        return findExisting(userKey)
                 .orElseGet(() -> userRepository.save(new User(UUID.randomUUID().toString())));
     }
 
-    private Optional<User> findExistingUser(String userKey) {
+    public Optional<User> findExisting(String userKey) {
         if (!isUuid(userKey)) {
             return Optional.empty();
         }

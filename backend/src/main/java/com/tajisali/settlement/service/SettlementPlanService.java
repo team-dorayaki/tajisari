@@ -58,10 +58,25 @@ public class SettlementPlanService {
         return toResponse(findPlan(planId));
     }
 
+    @Transactional(readOnly = true)
+    public SettlementPlanResponse getCurrent(String userKey) {
+        return toResponse(findCurrentPlan(userKey));
+    }
+
     // 기존 계획의 입력값 전체 수정
     @Transactional
     public SettlementPlanResponse update(Long planId, SettlementPlanCreateRequest request) {
-        SettlementPlan settlementPlan = findPlan(planId);
+        return updatePlan(findPlan(planId), request);
+    }
+
+    @Transactional
+    public SettlementPlanResponse updateCurrent(String userKey, SettlementPlanCreateRequest request) {
+        return updatePlan(findCurrentPlan(userKey), request);
+    }
+
+    private SettlementPlanResponse updatePlan(
+            SettlementPlan settlementPlan,
+            SettlementPlanCreateRequest request) {
         validateRequest(request);
         // 변경 전에 합계 범위까지 검증
         calculateTotals(request.getAdditionalInitialCosts());
@@ -87,6 +102,13 @@ public class SettlementPlanService {
 
     private SettlementPlan findPlan(Long planId) {
         return settlementPlanRepository.findById(planId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_PLAN_NOT_FOUND));
+    }
+
+    private SettlementPlan findCurrentPlan(String userKey) {
+        User user = anonymousUserService.findExisting(userKey)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_PLAN_NOT_FOUND));
+        return settlementPlanRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_PLAN_NOT_FOUND));
     }
 

@@ -5,6 +5,9 @@ import com.tajisali.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -76,5 +79,36 @@ class AnonymousUserServiceTest {
         assertThat(UUID.fromString(resolvedUser.getUserKey())).isNotNull();
         verify(userRepository, never()).findByUserKey(any());
         verify(userRepository).save(resolvedUser);
+    }
+
+    @Test
+    void 읽기_조회는_유효한_사용자_키의_기존_사용자를_반환하고_저장하지_않는다() {
+        User existingUser = new User(USER_KEY);
+        when(userRepository.findByUserKey(USER_KEY)).thenReturn(Optional.of(existingUser));
+
+        Optional<User> foundUser = anonymousUserService.findExisting(USER_KEY);
+
+        assertThat(foundUser).containsSame(existingUser);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void 읽기_조회는_stale_사용자_키에서_새_사용자를_만들지_않는다() {
+        when(userRepository.findByUserKey(USER_KEY)).thenReturn(Optional.empty());
+
+        Optional<User> foundUser = anonymousUserService.findExisting(USER_KEY);
+
+        assertThat(foundUser).isEmpty();
+        verify(userRepository, never()).save(any());
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = "not-a-uuid")
+    void 읽기_조회는_누락되거나_잘못된_키에서_Repository를_호출하지_않는다(String userKey) {
+        Optional<User> foundUser = anonymousUserService.findExisting(userKey);
+
+        assertThat(foundUser).isEmpty();
+        verifyNoInteractions(userRepository);
     }
 }
