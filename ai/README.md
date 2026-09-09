@@ -114,17 +114,17 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 ## 이미지 분석
 
-`POST /api/v1/analysis/images`에 `multipart/form-data`로 `files`를 여러 번 전달합니다.
+`POST /api/property-analyses/images`에 `multipart/form-data`로 `files`를 여러 번 전달합니다.
 
 ```powershell
-curl.exe -X POST "http://127.0.0.1:8000/api/v1/analysis/images" `
+curl.exe -X POST "http://127.0.0.1:8000/api/property-analyses/images" `
   -F "files=@test_jp_img4.png" `
   -F "files=@test_jp_img5.png"
 ```
 
 ## URL 분석
 
-`POST /api/v1/analysis/url`에 JSON을 전달합니다. Gemini의 URL Context가 공개 페이지를 직접 조회합니다.
+`POST /api/property-analyses/url`에 JSON을 전달합니다. Gemini의 URL Context가 공개 페이지를 직접 조회합니다.
 
 ```powershell
 $body = @{
@@ -133,7 +133,7 @@ $body = @{
 
 Invoke-RestMethod `
   -Method Post `
-  -Uri "http://127.0.0.1:8000/api/v1/analysis/url" `
+  -Uri "http://127.0.0.1:8000/api/property-analyses/url" `
   -ContentType "application/json" `
   -Body $body
 ```

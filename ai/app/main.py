@@ -77,7 +77,7 @@ def custom_openapi() -> dict:
         description=app.description,
         routes=app.routes,
     )
-    request_schema = schema["paths"][f"{settings.api_prefix}/analysis/images"]["post"][
+    request_schema = schema["paths"][f"{settings.api_prefix}/property-analyses/images"]["post"][
         "requestBody"
     ]["content"]["multipart/form-data"]["schema"]
 

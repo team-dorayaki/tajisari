@@ -1,0 +1,12 @@
+{
+  "images": {
+    "property": {"source_site": "LEOPALACE21", "exclusive_area_m2": 26.49, "rent": 32000, "management_fee": 4000, "deposit": 0, "key_money": null, "available_from": "2026-09-15", "nearest_station": null, "walk_minutes": null},
+    "required_cost_fragments": ["갱신", "환경유지", "열쇠", "청소", "주차", "화재보험", "항균", "입주자 지원", "보증 위탁", "인터넷"],
+    "required_facility_fragments": ["욕실", "세탁기", "인터넷", "급탕", "에어컨", "발코니", "플로어링"]
+  },
+  "url": {
+    "property": {"source_site": "SUUMO", "property_name": "Comfort Luminous", "prefecture": "千葉県", "city": "八街市", "exclusive_area_m2": 56.89, "rent": 86600, "management_fee": 4000, "deposit": 86600, "key_money": 0, "nearest_station": "八街", "walk_minutes": 16},
+    "required_cost_fragments": ["駐車場", "保証人代行"],
+    "required_facility_fragments": ["エアコン", "TVインターホン", "浴室乾燥機", "宅配ボックス", "防犯カメラ"]
+  }
+}

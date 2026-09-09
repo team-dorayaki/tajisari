@@ -59,7 +59,7 @@ def test_health() -> None:
 
 def test_image_upload_openapi_uses_binary_files() -> None:
     schema = client.get("/openapi.json").json()
-    request_schema = schema["paths"]["/api/v1/analysis/images"]["post"]["requestBody"][
+    request_schema = schema["paths"]["/api/property-analyses/images"]["post"]["requestBody"][
         "content"
     ]["multipart/form-data"]["schema"]
     schema_name = request_schema["$ref"].rsplit("/", 1)[-1]
@@ -73,7 +73,7 @@ def test_image_upload_openapi_uses_binary_files() -> None:
 
 def test_url_analysis_request_only_accepts_url() -> None:
     schema = client.get("/openapi.json").json()
-    request_schema = schema["paths"]["/api/v1/analysis/url"]["post"]["requestBody"][
+    request_schema = schema["paths"]["/api/property-analyses/url"]["post"]["requestBody"][
         "content"
     ]["application/json"]["schema"]
     schema_name = request_schema["$ref"].rsplit("/", 1)[-1]
@@ -84,7 +84,7 @@ def test_url_analysis_request_only_accepts_url() -> None:
 
 
 def test_invalid_url_returns_standard_error() -> None:
-    response = client.post("/api/v1/analysis/url", json={"url": "not-a-url"})
+    response = client.post("/api/property-analyses/url", json={"url": "not-a-url"})
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "INVALID_URL"
@@ -94,7 +94,7 @@ def test_invalid_url_returns_standard_error() -> None:
 
 def test_invalid_image_type_returns_standard_error() -> None:
     response = client.post(
-        "/api/v1/analysis/images",
+        "/api/property-analyses/images",
         files=[("files", ("property.txt", b"not an image", "text/plain"))],
     )
 
@@ -108,7 +108,7 @@ def test_too_many_images_returns_standard_error() -> None:
         ("files", (f"property-{index}.png", b"image", "image/png"))
         for index in range(settings.max_image_count + 1)
     ]
-    response = client.post("/api/v1/analysis/images", files=files)
+    response = client.post("/api/property-analyses/images", files=files)
 
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "TOO_MANY_IMAGES"

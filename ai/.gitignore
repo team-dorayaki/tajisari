@@ -6,3 +6,5 @@ __pycache__/
 
 /test*.png
 /benchmark-results/
+results/
+evaluation/*-report.json
