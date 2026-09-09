@@ -55,69 +55,82 @@ type PropertyListPayload = {
   properties: PropertyListItem[]
 }
 
-function createMockRoomImage(label: string, wall: string, floor: string, accent: string) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400"><rect width="800" height="270" fill="${wall}"/><rect y="270" width="800" height="130" fill="${floor}"/><rect x="80" y="66" width="230" height="174" rx="8" fill="#f9fbfc"/><path d="M80 153h230M195 66v174" stroke="#c8d3d8" stroke-width="8"/><rect x="505" y="95" width="168" height="17" rx="8" fill="${accent}"/><rect x="535" y="157" width="138" height="17" rx="8" fill="${accent}"/><rect x="560" y="219" width="113" height="17" rx="8" fill="${accent}"/><ellipse cx="398" cy="346" rx="137" ry="23" fill="#ffffff" fill-opacity=".28"/><text x="36" y="365" fill="#fff" font-family="sans-serif" font-size="22" font-weight="700">${label}</text></svg>`
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
+type PropertyDetailCostItem = {
+  id: string
+  label: string
+  amount: number | null
+  originalText: string | null
+  optional: boolean
+  selected: boolean
+  includedInTotal: boolean
+  conditional: boolean
+  timing: "INITIAL" | "MONTHLY" | "RENEWAL" | "MOVE_OUT" | "CONDITIONAL" | "UNKNOWN"
 }
 
-const mockProperties: PropertySummary[] = [
-  {
-    id: "shinjuku-room-a",
-    name: "신주쿠 원룸 A",
-    area: "도쿄도 신주쿠",
-    moveInDate: "2026-10-15",
-    rent: 78_000,
-    managementFee: 6_000,
-    initialCost: 326_000,
-    livingMonths: "4.2개월",
-    excludedCosts: [
-      { label: "화재보험료", category: "계약·입주 시" },
-      { label: "인터넷 이용료", category: "매월 반복비용" },
-    ],
-    images: [
-      { id: "shinjuku-1", src: createMockRoomImage("거실", "#e7ece7", "#d8cfbd", "#34404a"), alt: "신주쿠 원룸 A 거실" },
-      { id: "shinjuku-2", src: createMockRoomImage("주방", "#edf1ee", "#d7d0c5", "#657b7c"), alt: "신주쿠 원룸 A 주방" },
-      { id: "shinjuku-3", src: createMockRoomImage("수납공간", "#f1f0eb", "#d9d3cb", "#536168"), alt: "신주쿠 원룸 A 수납공간" },
-    ],
-  },
-  {
-    id: "yokohama-studio",
-    name: "요코하마 스튜디오",
-    area: "가나가와현 요코하마",
-    moveInDate: "2026-10-01",
-    rent: 65_000,
-    managementFee: 5_000,
-    initialCost: 245_000,
-    livingMonths: "5.1개월",
-    excludedCosts: [
-      { label: "퇴거 청소비", category: "계약 후" },
-    ],
-    images: [
-      { id: "yokohama-1", src: createMockRoomImage("스튜디오", "#e5eef1", "#d4cec2", "#4e7580"), alt: "요코하마 스튜디오 거실" },
-      { id: "yokohama-2", src: createMockRoomImage("발코니", "#eaf2ef", "#d0cabc", "#557d70"), alt: "요코하마 스튜디오 발코니" },
-      { id: "yokohama-3", src: createMockRoomImage("욕실", "#eff1f4", "#d6d1ca", "#5b718b"), alt: "요코하마 스튜디오 욕실" },
-    ],
-  },
-  {
-    id: "osaka-room-b",
-    name: "오사카 원룸 B",
-    area: "오사카부 오사카",
-    moveInDate: "2026-10-20",
-    rent: 59_000,
-    managementFee: 6_000,
-    initialCost: 268_000,
-    livingMonths: "4.8개월",
-    excludedCosts: [
-      { label: "보증회사 이용료", category: "계약·입주 시" },
-      { label: "수도요금", category: "매월 반복비용" },
-    ],
-    images: [
-      { id: "osaka-1", src: createMockRoomImage("원룸", "#f0ede8", "#d8cfc2", "#786657"), alt: "오사카 원룸 B 거실" },
-      { id: "osaka-2", src: createMockRoomImage("주방", "#eeece7", "#d7cfc4", "#6e7773"), alt: "오사카 원룸 B 주방" },
-      { id: "osaka-3", src: createMockRoomImage("창가", "#eceff0", "#d3cbc0", "#546c78"), alt: "오사카 원룸 B 창가" },
-    ],
-  },
-]
+type PropertyDetailPayload = {
+  propertyId: number
+  settlementPlanId: number | null
+  property: {
+    name: string | null
+    sourceSite: string | null
+    sourceUrl: string | null
+    prefecture: string | null
+    city: string | null
+    area: number | null
+    nearestStation: string | null
+    walkMinutes: number | null
+    availableFrom: string | null
+    contractPeriodMonths: number | null
+    priorityRank: 1 | 2 | null
+    rent: number | null
+    managementFee: number | null
+  }
+  images: Array<{ imageId: number; imageUrl: string; order: number }>
+  costAnalysis: {
+    summary: {
+      initialCost: number | null
+      minimumInitialCost: number
+      monthlyCost: number | null
+      contractMoveInCost: number
+      selectedOptionalCost: number
+      refundableAmount: number | null
+      nonRefundableAmount: number | null
+      estimatedMoveOutCost: number
+    }
+    costGroups: {
+      monthly: PropertyDetailCostItem[]
+      moveIn: PropertyDetailCostItem[]
+      optional: PropertyDetailCostItem[]
+      future: PropertyDetailCostItem[]
+    }
+    excludedCosts: Array<{ label: string; category: string; reason: string }>
+  }
+  simulation: {
+    exchangeRate: { jpy: number; krw: number }
+    availableFunds: number
+    initialCost: number
+    canMoveIn: boolean
+    balanceAfterMoveIn: number
+    monthlyHousingCost: number
+    monthlyLivingCost: number
+    totalMonthlyCost: number
+    monthlyBalances: Array<{ month: number; balance: number }>
+    livingMonths: number | null
+    isUnlimited: boolean
+    plannedStayMonths: number
+    requiredFunds: number
+    surplus: number
+    shortageJpy: number
+    shortageKrw: number
+  } | null
+}
+
+type PropertyDetail = Omit<PropertyDetailPayload, "images"> & {
+  id: string
+  name: string
+  areaLabel: string
+  images: PropertyImage[]
+}
 
 type PropertyComparison = {
   propertyId: string
@@ -205,10 +218,27 @@ async function fetchProperties(): Promise<PropertySummary[]> {
   }))
 }
 
-async function fetchProperty(propertyId: string): Promise<PropertySummary | null> {
-  await waitForMockResponse()
-  const property = mockProperties.find((item) => item.id === propertyId)
-  return property ? structuredClone(property) : null
+async function fetchProperty(propertyId: string): Promise<PropertyDetail> {
+  const response = await fetch(`/api/properties/${propertyId}`, { credentials: "same-origin" })
+  const body = await response.json().catch(() => null) as ApiResponse<PropertyDetailPayload> | null
+  const data = body?.data
+
+  if (!response.ok || !body?.success || data === null || data === undefined) {
+    throw new Error(body?.error?.message ?? `매물 상세를 불러오지 못했습니다. (${response.status})`)
+  }
+
+  const { property, images } = data
+  return {
+    ...data,
+    id: String(data.propertyId),
+    name: property.name?.trim() || "이름 없는 매물",
+    areaLabel: [property.prefecture, property.city].filter(Boolean).join(" "),
+    images: [...images].sort((left, right) => left.order - right.order).map((image, index) => ({
+      id: String(image.imageId),
+      src: image.imageUrl,
+      alt: `${property.name ?? "매물"} 사진 ${index + 1}`,
+    })),
+  }
 }
 
 async function deleteProperties(propertyIds: string[]): Promise<void> {
@@ -239,4 +269,4 @@ async function fetchPropertyComparisons(propertyIds: string[]): Promise<Property
 }
 
 export { deleteProperties, fetchProperties, fetchProperty, fetchPropertyComparisons }
-export type { ExcludedCost, PropertyComparison, PropertyImage, PropertySummary }
+export type { ExcludedCost, PropertyComparison, PropertyDetail, PropertyDetailCostItem, PropertyImage, PropertySummary }
