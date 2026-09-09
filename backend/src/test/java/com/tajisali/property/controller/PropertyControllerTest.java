@@ -4,6 +4,8 @@ import com.tajisali.common.config.JacksonConfig;
 import com.tajisali.common.exception.GlobalExceptionHandler;
 import com.tajisali.property.dto.PropertyListResponse;
 import com.tajisali.property.dto.PropertyDetailResponse;
+import com.tajisali.property.dto.PropertyPriorityUpdateRequest;
+import com.tajisali.property.dto.PropertyPriorityUpdateResponse;
 import com.tajisali.property.service.PropertyCommandService;
 import com.tajisali.property.service.PropertyQueryService;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -107,5 +110,34 @@ class PropertyControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(propertyCommandService).deleteProperty(10L, USER_KEY);
+    }
+
+    @Test
+    void 사용자의_매물_우선순위를_일괄_저장한다() throws Exception {
+        var request = new PropertyPriorityUpdateRequest(10L, 20L);
+        var response = new PropertyPriorityUpdateResponse(List.of(
+                new PropertyPriorityUpdateResponse.Priority(10L, 1),
+                new PropertyPriorityUpdateResponse.Priority(20L, 2)));
+        when(propertyCommandService.updatePriorities(request, USER_KEY))
+                .thenReturn(response);
+
+        mockMvc.perform(put("/api/properties/priorities")
+                        .cookie(new Cookie("tajisari_anonymous_user", USER_KEY))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "firstPriorityPropertyId": 10,
+                                  "secondPriorityPropertyId": 20
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.priorities[0].propertyId").value(10))
+                .andExpect(jsonPath("$.data.priorities[0].priorityRank").value(1))
+                .andExpect(jsonPath("$.data.priorities[1].propertyId").value(20))
+                .andExpect(jsonPath("$.data.priorities[1].priorityRank").value(2))
+                .andExpect(jsonPath("$.error").value((Object) null));
+
+        verify(propertyCommandService).updatePriorities(request, USER_KEY);
     }
 }

@@ -3,6 +3,7 @@ package com.tajisali.property.service;
 import com.tajisali.common.exception.BusinessException;
 import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.property.domain.Property;
+import com.tajisali.property.dto.PropertyPriorityUpdateRequest;
 import com.tajisali.property.repository.PropertyRepository;
 import com.tajisali.user.domain.User;
 import com.tajisali.user.service.AnonymousUserService;
@@ -13,8 +14,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -80,6 +83,83 @@ class PropertyCommandServiceTest {
                 .findByIdAndUserId(org.mockito.ArgumentMatchers.anyLong(),
                         org.mockito.ArgumentMatchers.anyLong());
         verify(propertyRepository, never()).delete(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void 사용자의_기존_순위를_해제하고_새_순위를_일괄_저장한다() {
+        User user = user(1L);
+        Property oldFirst = property(1L, 1);
+        Property newFirst = property(2L, null);
+        Property newSecond = property(3L, 2);
+        when(anonymousUserService.findExisting(USER_KEY)).thenReturn(Optional.of(user));
+        when(propertyRepository.findByIdAndUserId(2L, 1L)).thenReturn(Optional.of(newFirst));
+        when(propertyRepository.findByIdAndUserId(3L, 1L)).thenReturn(Optional.of(newSecond));
+        when(propertyRepository.findAllByUserId(1L))
+                .thenReturn(List.of(oldFirst, newFirst, newSecond));
+
+        var response = propertyCommandService.updatePriorities(
+                new PropertyPriorityUpdateRequest(2L, 3L), USER_KEY);
+
+        assertThat(oldFirst.getPriorityRank()).isNull();
+        assertThat(newFirst.getPriorityRank()).isEqualTo(1);
+        assertThat(newSecond.getPriorityRank()).isEqualTo(2);
+        assertThat(response.priorities())
+                .extracting(item -> item.propertyId(), item -> item.priorityRank())
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(2L, 1),
+                        org.assertj.core.groups.Tuple.tuple(3L, 2));
+        verify(propertyRepository).flush();
+    }
+
+    @Test
+    void 우선순위를_null로_보내면_사용자의_기존_순위를_해제한다() {
+        User user = user(1L);
+        Property oldFirst = property(1L, 1);
+        Property oldSecond = property(2L, 2);
+        when(anonymousUserService.findExisting(USER_KEY)).thenReturn(Optional.of(user));
+        when(propertyRepository.findAllByUserId(1L)).thenReturn(List.of(oldFirst, oldSecond));
+
+        var response = propertyCommandService.updatePriorities(
+                new PropertyPriorityUpdateRequest(null, null), USER_KEY);
+
+        assertThat(oldFirst.getPriorityRank()).isNull();
+        assertThat(oldSecond.getPriorityRank()).isNull();
+        assertThat(response.priorities()).isEmpty();
+    }
+
+    @Test
+    void 다른_사용자의_매물은_우선순위로_지정할_수_없다() {
+        User user = user(1L);
+        when(anonymousUserService.findExisting(USER_KEY)).thenReturn(Optional.of(user));
+        when(propertyRepository.findByIdAndUserId(99L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> propertyCommandService.updatePriorities(
+                new PropertyPriorityUpdateRequest(99L, null), USER_KEY))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PROPERTY_NOT_FOUND);
+
+        verify(propertyRepository, never()).findAllByUserId(1L);
+    }
+
+    @Test
+    void 같은_매물을_두_순위에_중복_지정할_수_없다() {
+        assertThatThrownBy(() -> propertyCommandService.updatePriorities(
+                new PropertyPriorityUpdateRequest(1L, 1L), USER_KEY))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PROPERTY_DUPLICATE_PRIORITY);
+
+        verify(anonymousUserService, never())
+                .findExisting(org.mockito.ArgumentMatchers.any());
+    }
+
+    private Property property(Long id, Integer priorityRank) {
+        Property property = new Property(
+                "테스트 매물 " + id, 65_000L, 245_000L, 70_000L,
+                priorityRank, LocalDateTime.now());
+        org.springframework.test.util.ReflectionTestUtils.setField(property, "id", id);
+        return property;
     }
 
     private User user(Long id) {
