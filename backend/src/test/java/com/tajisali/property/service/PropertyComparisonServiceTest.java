@@ -34,11 +34,16 @@ class PropertyComparisonServiceTest {
     private static final String USER_KEY = "00000000-0000-0000-0000-000000000001";
     private static final Long USER_ID = 1L;
 
-    @Mock private AnonymousUserService anonymousUserService;
-    @Mock private PropertyRepository propertyRepository;
-    @Mock private SettlementPlanRepository settlementPlanRepository;
-    @Mock private PropertyCostCalculationService propertyCostCalculationService;
-    @Mock private PropertyFundSimulationService propertyFundSimulationService;
+    @Mock
+    private AnonymousUserService anonymousUserService;
+    @Mock
+    private PropertyRepository propertyRepository;
+    @Mock
+    private SettlementPlanRepository settlementPlanRepository;
+    @Mock
+    private PropertyCostCalculationService propertyCostCalculationService;
+    @Mock
+    private PropertyFundSimulationService propertyFundSimulationService;
 
     private PropertyComparisonService propertyComparisonService;
 
@@ -58,6 +63,10 @@ class PropertyComparisonServiceTest {
         SettlementPlan plan = plan();
         Property first = property(11L, "신주쿠 원룸 A", 300_000L, 80_000L, 1);
         Property second = property(22L, "요코하마 스튜디오", 250_000L, 70_000L, null);
+        PropertyImage firstImage = new PropertyImage(
+                first, "properties/11/room.jpg", 0, "room.jpg", LocalDateTime.now());
+        ReflectionTestUtils.setField(firstImage, "id", 15L);
+        ReflectionTestUtils.setField(first, "images", List.of(firstImage));
 
         when(anonymousUserService.findExisting(USER_KEY)).thenReturn(Optional.of(user));
         when(settlementPlanRepository.findByUserId(USER_ID)).thenReturn(Optional.of(plan));
@@ -81,6 +90,8 @@ class PropertyComparisonServiceTest {
         assertThat(response.properties())
                 .extracting(item -> item.propertyId())
                 .containsExactly(11L, 22L);
+        assertThat(response.properties().getFirst().thumbnailUrl())
+                .isEqualTo("/api/property-images/15");
         assertThat(response.properties().getFirst().costs())
                 .extracting(
                         item -> item.confirmedInitialCost(),
