@@ -214,7 +214,9 @@ public class PropertyComparisonService {
         return new PropertyComparisonResponse.PropertyComparison(
                 property.getId(),
                 property.getPropertyName(),
-                property.getImages().isEmpty() ? null : property.getImages().getFirst().getStorageKey(),
+                property.getImages().isEmpty()
+                        ? null
+                        : "/api/property-images/" + property.getImages().getFirst().getId(),
                 property.getPriorityRank(),
                 new PropertyComparisonResponse.Conditions(
                         property.getPrefecture(),
