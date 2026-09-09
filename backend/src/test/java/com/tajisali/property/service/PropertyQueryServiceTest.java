@@ -3,6 +3,7 @@ package com.tajisali.property.service;
 import com.tajisali.common.exception.BusinessException;
 import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.property.domain.Property;
+import com.tajisali.property.domain.PropertyImage;
 import com.tajisali.property.dto.PropertyDetailResponse;
 import com.tajisali.property.repository.PropertyRepository;
 import com.tajisali.settlement.domain.CostCategory;
@@ -56,6 +57,8 @@ class PropertyQueryServiceTest {
                 "요코하마 스튜디오", 65_000L, 245_000L, 70_000L,
                 1, LocalDateTime.now());
         ReflectionTestUtils.setField(property, "id", 10L);
+        ReflectionTestUtils.setField(property, "images", List.of(
+                image(property, 15L, 0, "properties/10/room.jpg")));
 
         User user = user();
         when(anonymousUserService.findExisting(USER_KEY)).thenReturn(Optional.of(user));
@@ -87,6 +90,26 @@ class PropertyQueryServiceTest {
                         10L, "요코하마 스튜디오", 65_000L, 245_000L,
                         new java.math.BigDecimal("3.2"),
                         1);
+        assertThat(response.properties().getFirst().thumbnailUrl())
+                .isEqualTo("/api/property-images/15");
+    }
+
+    @Test
+    void 이미지가_없는_매물은_목록에_썸네일_URL을_반환하지_않는다() {
+        Property property = new Property(
+                "이미지 없는 매물", 65_000L, 245_000L, 70_000L,
+                null, LocalDateTime.now());
+        ReflectionTestUtils.setField(property, "id", 11L);
+        User user = user();
+
+        when(anonymousUserService.findExisting(USER_KEY)).thenReturn(Optional.of(user));
+        when(settlementPlanRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
+        when(propertyRepository.findAllByUserIdOrderByCreatedAtDesc(USER_ID))
+                .thenReturn(List.of(property));
+
+        var response = propertyQueryService.getProperties(USER_KEY);
+
+        assertThat(response.properties().getFirst().thumbnailUrl()).isNull();
     }
 
     @Test
@@ -106,6 +129,10 @@ class PropertyQueryServiceTest {
                 1, LocalDateTime.now());
         ReflectionTestUtils.setField(property, "id", 10L);
         ReflectionTestUtils.setField(property, "deposit", 65_000L);
+        ReflectionTestUtils.setField(property, "images", List.of(
+                image(property, 15L, 0, "properties/10/room-1.jpg"),
+                image(property, 16L, 1, "properties/10/room-2.png"),
+                image(property, 17L, 2, "properties/10/room-3.webp")));
 
         SettlementPlan plan = new SettlementPlan(
                 LocalDate.now().plusMonths(1), 12,
@@ -148,6 +175,12 @@ class PropertyQueryServiceTest {
         assertThat(response.simulation().monthlyBalances())
                 .extracting(PropertyDetailResponse.MonthlyBalance::month)
                 .containsExactly(1, 2, 3);
+        assertThat(response.images())
+                .extracting(image -> image.imageId(), image -> image.imageUrl(), image -> image.order())
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(15L, "/api/property-images/15", 0),
+                        org.assertj.core.groups.Tuple.tuple(16L, "/api/property-images/16", 1),
+                        org.assertj.core.groups.Tuple.tuple(17L, "/api/property-images/17", 2));
     }
 
     @Test
@@ -166,6 +199,13 @@ class PropertyQueryServiceTest {
         User user = new User(USER_KEY);
         ReflectionTestUtils.setField(user, "id", USER_ID);
         return user;
+    }
+
+    private PropertyImage image(Property property, Long id, int order, String storageKey) {
+        PropertyImage image = new PropertyImage(
+                property, storageKey, order, "room-" + order + ".jpg", LocalDateTime.now());
+        ReflectionTestUtils.setField(image, "id", id);
+        return image;
     }
 
     private PropertyFundSimulationResult simulationResult() {

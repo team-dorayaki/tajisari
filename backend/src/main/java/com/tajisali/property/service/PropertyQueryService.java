@@ -81,7 +81,7 @@ public class PropertyQueryService {
                         property.getManagementFee()),
                 property.getImages().stream()
                         .map(image -> new PropertyDetailResponse.PropertyImage(
-                                image.getId(), image.getStorageKey(), image.getImageOrder()))
+                                image.getId(), imageUrl(image.getId()), image.getImageOrder()))
                         .toList(),
                 new PropertyDetailResponse.CostAnalysis(
                         costPresentation.summary(),
@@ -268,7 +268,7 @@ public class PropertyQueryService {
             Property property, SettlementPlan settlementPlan) {
         String thumbnailUrl = property.getImages().isEmpty()
                 ? null
-                : property.getImages().getFirst().getStorageKey();
+                : imageUrl(property.getImages().getFirst().getId());
         PropertyDetailResponse.Simulation simulation = createSimulation(property, settlementPlan);
 
         return new PropertyListResponse.PropertySummary(
@@ -279,6 +279,10 @@ public class PropertyQueryService {
                 simulation == null ? null : simulation.livingMonths(),
                 property.getPriorityRank(),
                 thumbnailUrl);
+    }
+
+    private String imageUrl(Long imageId) {
+        return "/api/property-images/" + imageId;
     }
 
     private record PropertyDetailCostPresentation(

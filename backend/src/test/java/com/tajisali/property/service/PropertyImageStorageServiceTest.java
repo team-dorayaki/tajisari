@@ -80,4 +80,22 @@ class PropertyImageStorageServiceTest {
 
         assertThat(storageRoot.resolve("properties/15")).doesNotExist();
     }
+
+    @Test
+    void 저장된_파일_확장자에_따라_이미지_ContentType을_결정한다() throws Exception {
+        PropertyImageStorageService storageService =
+                new PropertyImageStorageService(storageRoot.toString());
+        Path directory = storageRoot.resolve("properties/15");
+        Files.createDirectories(directory);
+        Files.write(directory.resolve("room.jpg"), new byte[]{1});
+        Files.write(directory.resolve("room.webp"), new byte[]{2});
+        Files.write(directory.resolve("room.bmp"), new byte[]{3});
+
+        assertThat(storageService.load("properties/15/room.jpg").contentType())
+                .isEqualTo(MediaType.IMAGE_JPEG);
+        assertThat(storageService.load("properties/15/room.webp").contentType())
+                .isEqualTo(MediaType.parseMediaType("image/webp"));
+        assertThat(storageService.load("properties/15/room.bmp").contentType())
+                .isEqualTo(MediaType.parseMediaType("image/bmp"));
+    }
 }

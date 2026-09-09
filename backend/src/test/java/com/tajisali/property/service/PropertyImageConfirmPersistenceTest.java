@@ -23,6 +23,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -121,6 +122,11 @@ class PropertyImageConfirmPersistenceTest {
                 .isEqualTo(firstImage);
         assertThat(Files.readAllBytes(storageRoot.resolve(images.get(1).getStorageKey())))
                 .isEqualTo(secondImage);
+        assertThat(propertyImageRepository.findByIdAndProperty_User_Id(
+                images.getFirst().getId(), user.getId())).isPresent();
+        var otherUser = userRepository.save(new com.tajisali.user.domain.User(UUID.randomUUID().toString()));
+        assertThat(propertyImageRepository.findByIdAndProperty_User_Id(
+                images.getFirst().getId(), otherUser.getId())).isEmpty();
         assertThat(analysis.getSourceType()).isEqualTo("IMAGE");
         assertThat(tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(analysis.getRawJson())).isEqualTo(rawResult);
