@@ -53,6 +53,9 @@ class PropertyCommandServiceTest {
     @Mock
     private AnonymousUserService anonymousUserService;
 
+    @Mock
+    private PropertyCostCalculationService propertyCostCalculationService;
+
     private PropertyCommandService propertyCommandService;
 
     @BeforeEach
@@ -62,7 +65,8 @@ class PropertyCommandServiceTest {
                 propertyAiAnalysisRepository,
                 propertyImageRepository,
                 propertyCostItemRepository,
-                anonymousUserService
+                anonymousUserService,
+                propertyCostCalculationService
         );
     }
 
@@ -73,6 +77,13 @@ class PropertyCommandServiceTest {
         rawResult.putObject("property").put("key_money", 0);
         PropertyConfirmRequest request = confirmRequest(rawResult, null, 0L);
         when(anonymousUserService.resolveOrCreate(USER_KEY)).thenReturn(user);
+        when(propertyCostCalculationService.calculate(argThat(property ->
+                property.getCostItems().size() == 2
+                        && property.getCostItems().get(0).getAmount() == null
+                        && Long.valueOf(0L).equals(
+                        property.getCostItems().get(1).getAmount()))))
+                .thenReturn(new PropertyCostCalculationResult(
+                        120_000L, 70_000L, null, null, true, false, false));
         when(propertyRepository.save(any(Property.class))).thenAnswer(invocation -> {
             Property property = invocation.getArgument(0);
             org.springframework.test.util.ReflectionTestUtils.setField(property, "id", 15L);
@@ -84,7 +95,10 @@ class PropertyCommandServiceTest {
         verify(propertyRepository).save(argThat(property ->
                 property.getUser() == user
                         && property.getSourceUrl().equals("https://suumo.jp/chintai/example")
-                        && property.getPropertyName().equals("요코하마 스튜디오")));
+                        && property.getPropertyName().equals("요코하마 스튜디오")
+                        && property.getListedInitialCostTotal().equals(999_999L)
+                        && property.getConfirmedInitialCost().equals(120_000L)
+                        && property.getConfirmedMonthlyCost().equals(70_000L)));
         verify(propertyCostItemRepository).saveAll(argThat(costItems -> {
             assertThat(costItems)
                     .extracting(PropertyCostItem::getAmount)
@@ -96,6 +110,11 @@ class PropertyCommandServiceTest {
                         && analysis.getSourceType().equals("URL")
                         && analysis.getModelVersion().equals("gemini-3.5-flash-lite")
                         && analysis.getRawJson().equals(rawResult.toString())));
+
+        var inOrder = org.mockito.Mockito.inOrder(
+                propertyCostCalculationService, propertyRepository);
+        inOrder.verify(propertyCostCalculationService).calculate(any(Property.class));
+        inOrder.verify(propertyRepository).save(any(Property.class));
         assertThat(result.response().propertyId()).isEqualTo(15L);
         assertThat(result.userKey()).isEqualTo(USER_KEY);
     }
@@ -320,7 +339,7 @@ class PropertyCommandServiceTest {
                         0L,
                         null,
                         24,
-                        null),
+                        999_999L),
                 List.of(
                         new PropertyConfirmRequest.PropertyCostItem(
                                 "보증금", "보증금", firstAmount, null,

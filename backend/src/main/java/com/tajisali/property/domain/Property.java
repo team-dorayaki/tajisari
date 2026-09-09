@@ -154,6 +154,15 @@ public class Property {
         this.user = Objects.requireNonNull(user, "user must not be null");
     }
 
+    public void addCostItems(List<PropertyCostItem> costItems) {
+        this.costItems.addAll(costItems);
+    }
+
+    public void confirmCosts(Long confirmedInitialCost, Long confirmedMonthlyCost) {
+        this.confirmedInitialCost = confirmedInitialCost;
+        this.confirmedMonthlyCost = confirmedMonthlyCost;
+    }
+
     public void updatePriorityRank(Integer priorityRank) {
         this.priorityRank = priorityRank;
     }

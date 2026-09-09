@@ -33,16 +33,17 @@ public class PropertyCommandService {
     private final PropertyImageRepository propertyImageRepository;
     private final PropertyCostItemRepository propertyCostItemRepository;
     private final AnonymousUserService anonymousUserService;
+    private final PropertyCostCalculationService propertyCostCalculationService;
 
     @Transactional
     public PropertyConfirmResult confirmUrl(PropertyConfirmRequest request, String userKey) {
         User user = anonymousUserService.resolveOrCreate(userKey);
         LocalDateTime createdAt = LocalDateTime.now();
-        Property savedProperty = propertyRepository.save(createProperty(user, request, createdAt));
+        Property property = createProperty(user, request, createdAt);
 
         List<PropertyCostItem> costItems = request.propertyCostItems().stream()
                 .map(costItem -> new PropertyCostItem(
-                        savedProperty,
+                        property,
                         costItem.rawName(),
                         costItem.displayName(),
                         costItem.amount(),
@@ -52,6 +53,11 @@ public class PropertyCommandService {
                         costItem.timing(),
                         createdAt))
                 .toList();
+        property.addCostItems(costItems);
+        PropertyCostCalculationResult costCalculation = propertyCostCalculationService.calculate(property);
+        property.confirmCosts(costCalculation.initialCost(), costCalculation.monthlyCost());
+
+        Property savedProperty = propertyRepository.save(property);
         propertyCostItemRepository.saveAll(costItems);
         propertyAiAnalysisRepository.save(new PropertyAiAnalysis(
                 savedProperty,

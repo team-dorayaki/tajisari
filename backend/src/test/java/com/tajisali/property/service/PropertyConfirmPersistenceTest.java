@@ -22,7 +22,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({PropertyCommandService.class, AnonymousUserService.class})
+@Import({
+        PropertyCommandService.class,
+        PropertyCostCalculationService.class,
+        AnonymousUserService.class
+})
 class PropertyConfirmPersistenceTest {
 
     @Autowired
@@ -56,14 +60,17 @@ class PropertyConfirmPersistenceTest {
                                 "https://suumo.jp/chintai/confirmed-property",
                                 "요코하마 스튜디오",
                                 null, null, null, null, null,
-                                65_000L, 5_000L, null, 0L, null, null, null),
+                                65_000L, 5_000L, 100_000L, null, null, null, 999_999L),
                         List.of(
                                 new PropertyConfirmRequest.PropertyCostItem(
-                                        "보증금", "보증금", null, null,
+                                        "계약사무수수료", "계약사무수수료", 20_000L, null,
                                         ObligationStatus.REQUIRED, true, CostTiming.INITIAL),
                                 new PropertyConfirmRequest.PropertyCostItem(
-                                        "사례금", "사례금", 0L, "0개월",
-                                        ObligationStatus.OPTIONAL, false, CostTiming.INITIAL)),
+                                        "선택 비용", "선택 비용", 0L, "0개월",
+                                        ObligationStatus.OPTIONAL, false, CostTiming.INITIAL),
+                                new PropertyConfirmRequest.PropertyCostItem(
+                                        "월 관리 지원비", "월 관리 지원비", null, null,
+                                        ObligationStatus.REQUIRED, true, CostTiming.MONTHLY)),
                         rawResult),
                 null);
         entityManager.flush();
@@ -83,7 +90,10 @@ class PropertyConfirmPersistenceTest {
                 .extracting(savedProperty -> savedProperty.getId())
                 .contains(property.getId());
         assertThat(costItems).extracting(costItem -> costItem.getAmount())
-                .containsExactlyInAnyOrder(null, 0L);
+                .containsExactlyInAnyOrder(20_000L, 0L, null);
+        assertThat(property.getConfirmedInitialCost()).isEqualTo(120_000L);
+        assertThat(property.getConfirmedMonthlyCost()).isEqualTo(70_000L);
+        assertThat(property.getListedInitialCostTotal()).isEqualTo(999_999L);
         assertThat(analysis.getSourceType()).isEqualTo("URL");
         assertThat(analysis.getModelVersion()).isEqualTo("gemini-3.5-flash-lite");
         assertThat(analysis.getRawJson()).isEqualTo(rawResult.toString());
