@@ -22,14 +22,9 @@ public record PropertyConfirmRequest(
         @NotNull JsonNode rawResult
 ) {
     @AssertTrue
-    public boolean isUrlAnalysis() {
-        return sourceType == PropertyAnalysisResponse.SourceType.URL;
-    }
-
-    @AssertTrue
     public boolean hasHttpSourceUrl() {
         if (property == null || property.sourceUrl() == null || property.sourceUrl().isBlank()) {
-            return false;
+            return true;
         }
         try {
             URI sourceUrl = URI.create(property.sourceUrl());
@@ -48,7 +43,7 @@ public record PropertyConfirmRequest(
 
     public record PropertyInfo(
             @NotNull PropertyAnalysisResponse.SourceSite sourceSite,
-            @NotBlank String sourceUrl,
+            String sourceUrl,
             @NotBlank String propertyName,
             String prefecture,
             String city,

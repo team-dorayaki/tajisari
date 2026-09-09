@@ -85,20 +85,30 @@ class PropertyControllerTest {
     }
 
     @Test
-    void 필수_요청값이_없거나_URL_분석이_아니면_저장_Service를_호출하지_않는다() throws Exception {
+    void 필수_요청값이_없으면_저장_Service를_호출하지_않는다() throws Exception {
         mockMvc.perform(post("/api/properties/confirm")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
 
-        mockMvc.perform(post("/api/properties/confirm")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(confirmRequest("https://suumo.jp/chintai/example", "IMAGE")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
-
         verifyNoInteractions(propertyCommandService);
+    }
+
+    @Test
+    void 이미지_분석_결과는_출처_URL_없이_저장할_수_있다() throws Exception {
+        when(propertyCommandService.confirmUrl(any(), eq(USER_KEY)))
+                .thenReturn(new PropertyConfirmResult(
+                        new PropertyConfirmResponse(15L), USER_KEY));
+
+        mockMvc.perform(post("/api/properties/confirm")
+                        .cookie(new Cookie("tajisari_anonymous_user", USER_KEY))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(confirmImageRequest()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.propertyId").value(15));
+
+        verify(propertyCommandService).confirmUrl(any(), eq(USER_KEY));
     }
 
     @Test
@@ -224,5 +234,21 @@ class PropertyControllerTest {
                   "rawResult": {"property": {"key_money": 0}}
                 }
                 """.formatted(sourceType, sourceUrl);
+    }
+
+    private String confirmImageRequest() {
+        return """
+                {
+                  "sourceType": "IMAGE",
+                  "modelVersion": "gemini-3.5-flash-lite",
+                  "property": {
+                    "sourceSite": "UNKNOWN",
+                    "sourceUrl": null,
+                    "propertyName": "요코하마 스튜디오"
+                  },
+                  "propertyCostItems": [],
+                  "rawResult": {"property": {"key_money": 0}}
+                }
+                """;
     }
 }
