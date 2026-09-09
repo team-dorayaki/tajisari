@@ -1,5 +1,6 @@
 package com.tajisali.property.domain;
 
+import com.tajisali.user.domain.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -10,6 +11,7 @@ import java.time.LocalDate;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "property")
@@ -21,6 +23,10 @@ public class Property {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "property_id")
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     @Column(name = "source_site", length = 50)
     private String sourceSite;
@@ -73,7 +79,7 @@ public class Property {
     @Column(name = "confirmed_monthly_cost")
     private Long confirmedMonthlyCost;
 
-    @Column(name = "priority_rank", unique = true)
+    @Column(name = "priority_rank")
     private Integer priorityRank;
 
     @Column(name = "created_at", nullable = false)
@@ -104,5 +110,9 @@ public class Property {
         this.priorityRank = priorityRank;
         this.createdAt = createdAt;
         this.updatedAt = createdAt;
+    }
+
+    public void assignOwner(User user) {
+        this.user = Objects.requireNonNull(user, "user must not be null");
     }
 }
