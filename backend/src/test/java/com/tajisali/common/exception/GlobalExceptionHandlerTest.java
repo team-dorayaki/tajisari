@@ -13,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.*;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -43,6 +44,8 @@ class GlobalExceptionHandlerTest {
             "SETTLEMENT_PLAN_INVALID_COST_TYPE, 400",
             "SETTLEMENT_PLAN_DUPLICATE_COST_TYPE, 400",
             "SETTLEMENT_PLAN_COST_TOTAL_OVERFLOW, 400",
+            "PROPERTY_ANALYSIS_FAILED, 502",
+            "PROPERTY_ANALYSIS_TIMEOUT, 504",
             "COMMON_INTERNAL_ERROR, 500"
     })
     void 비즈니스_예외는_계약의_상태와_코드로_반환된다(ErrorCode errorCode, int status) throws Exception {
@@ -98,6 +101,13 @@ class GlobalExceptionHandlerTest {
         assertError(result, 500, "COMMON_INTERNAL_ERROR");
         assertThat(result.getResponse().getContentAsString())
                 .doesNotContain("SELECT", "private_table", "IllegalStateException", "TestController", "stackTrace");
+    }
+
+    @Test
+    void 업로드_용량을_초과하면_공통_입력_오류를_반환한다() throws Exception {
+        var result = mockMvc.perform(get("/test/upload-too-large")).andReturn();
+
+        assertError(result, 400, "COMMON_INVALID_INPUT");
     }
 
     private void assertError(MvcResult result, int status, String code) throws Exception {
@@ -172,6 +182,11 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/test/unexpected")
         ApiResponse<Void> unexpected() {
             throw new IllegalStateException("SELECT * FROM private_table");
+        }
+
+        @GetMapping("/test/upload-too-large")
+        ApiResponse<Void> uploadTooLarge() {
+            throw new MaxUploadSizeExceededException(15L * 1024 * 1024);
         }
     }
 
