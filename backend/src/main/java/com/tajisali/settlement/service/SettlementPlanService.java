@@ -52,21 +52,9 @@ public class SettlementPlanService {
         return new SettlementPlanCreateResult(response, user.getUserKey());
     }
 
-    // 저장된 계획과 통화별 비용 합계 조회
-    @Transactional(readOnly = true)
-    public SettlementPlanResponse get(Long planId) {
-        return toResponse(findPlan(planId));
-    }
-
     @Transactional(readOnly = true)
     public SettlementPlanResponse getCurrent(String userKey) {
         return toResponse(findCurrentPlan(userKey));
-    }
-
-    // 기존 계획의 입력값 전체 수정
-    @Transactional
-    public SettlementPlanResponse update(Long planId, SettlementPlanCreateRequest request) {
-        return updatePlan(findPlan(planId), request);
     }
 
     @Transactional
@@ -98,11 +86,6 @@ public class SettlementPlanService {
         addCostItems(settlementPlan, request.getMonthlyLivingCosts(), CostCategory.MONTHLY);
 
         return toResponse(settlementPlan);
-    }
-
-    private SettlementPlan findPlan(Long planId) {
-        return settlementPlanRepository.findById(planId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_PLAN_NOT_FOUND));
     }
 
     private SettlementPlan findCurrentPlan(String userKey) {
