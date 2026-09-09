@@ -16,6 +16,9 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
     @EntityGraph(attributePaths = "images")
     Optional<Property> findByIdAndUserId(Long propertyId, Long userId);
 
+    @EntityGraph(attributePaths = "images")
+    List<Property> findAllByIdInAndUserId(List<Long> propertyIds, Long userId);
+
     @Query("""
             select property
             from Property property

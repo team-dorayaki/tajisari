@@ -21,6 +21,8 @@ public enum ErrorCode {
     PROPERTY_COST_TOTAL_OVERFLOW(HttpStatus.BAD_REQUEST, "매물 비용 합계가 지원하는 금액 범위를 초과했습니다."),
     PROPERTY_FUND_SIMULATION_TOTAL_OVERFLOW(HttpStatus.BAD_REQUEST, "자금 시뮬레이션 합계가 지원하는 금액 범위를 초과했습니다."),
     PROPERTY_DUPLICATE_PRIORITY(HttpStatus.BAD_REQUEST, "같은 매물을 1순위와 2순위에 중복 지정할 수 없습니다."),
+    PROPERTY_COMPARISON_INVALID_SIZE(HttpStatus.BAD_REQUEST, "비교할 매물은 2개 이상 3개 이하로 선택해 주세요."),
+    PROPERTY_COMPARISON_DUPLICATE_PROPERTY(HttpStatus.BAD_REQUEST, "같은 매물을 중복해서 비교할 수 없습니다."),
     EXCHANGE_RATE_AMOUNT_OVERFLOW(HttpStatus.BAD_REQUEST, "환산 결과가 지원하는 금액 범위를 초과했습니다."),
 
     PROPERTY_ANALYSIS_FAILED(HttpStatus.BAD_GATEWAY, "매물 분석에 실패했습니다. 잠시 후 다시 시도해 주세요."),
