@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -50,6 +51,20 @@ class PropertyAnalysisControllerTest {
                 .andExpect(jsonPath("$.error").value((Object) null));
 
         verify(propertyAnalysisService).analyzeImages(anyList());
+    }
+
+    @Test
+    void 이미지_세_장은_정상_범위로_Service에_전달한다() throws Exception {
+        when(propertyAnalysisService.analyzeImages(anyList())).thenReturn(response("images"));
+
+        mockMvc.perform(multipart("/api/property-analyses/images")
+                        .file(image("1.png"))
+                        .file(image("2.png"))
+                        .file(image("3.png")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(propertyAnalysisService).analyzeImages(argThat(files -> files.size() == 3));
     }
 
     @Test

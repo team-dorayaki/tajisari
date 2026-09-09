@@ -8,6 +8,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -126,6 +127,34 @@ class AiAnalysisClientTest {
                 .andRespond(withSuccess(
                         validResponse("url").replace("\"3.0\"", "\"2.0\""),
                         MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.analyzeUrl("https://example.com"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.PROPERTY_ANALYSIS_FAILED));
+        server.verify();
+    }
+
+    @Test
+    void AI_응답의_필수_구조가_없으면_공통_분석_실패로_변환된다() {
+        server.expect(requestTo("http://ai.test/api/v1/analysis/url"))
+                .andRespond(withSuccess(
+                        "{\"input_type\":\"url\",\"model\":\"gemini-3.5-flash-lite\",\"result\":{}}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.analyzeUrl("https://example.com"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.PROPERTY_ANALYSIS_FAILED));
+        server.verify();
+    }
+
+    @Test
+    void AI_서버_연결_실패는_공통_분석_실패로_변환된다() {
+        server.expect(requestTo("http://ai.test/api/v1/analysis/url"))
+                .andRespond(request -> {
+                    throw new ResourceAccessException("connection refused");
+                });
 
         assertThatThrownBy(() -> client.analyzeUrl("https://example.com"))
                 .isInstanceOfSatisfying(BusinessException.class,
