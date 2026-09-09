@@ -4,7 +4,8 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.core.errors import AppError
-from gemini_analyze_image import DEFAULT_PROMPT, analyze_images, analyze_webpage
+from gemini_analyze_image import DEFAULT_PROMPT
+from app.services.dual_model import analyze
 
 
 ALLOWED_IMAGE_TYPES = {
@@ -55,7 +56,14 @@ def analyze_uploaded_images(
             path.write_bytes(content)
             image_paths.append(path)
 
-        result_text = analyze_images(image_paths, selected_prompt, selected_model)
+        result_text = analyze(
+            image_paths,
+            prompt=selected_prompt,
+            mode=settings.analysis_mode,
+            fixed_model=settings.fixed_model,
+            cost_model=settings.cost_model,
+            single_model=selected_model,
+        )
     return json.loads(result_text)
 
 
@@ -67,4 +75,13 @@ def analyze_property_url(
     """Gemini URL Context로 공개 웹페이지 한 개를 분석한다."""
     selected_model = model or settings.gemini_model
     selected_prompt = prompt or DEFAULT_PROMPT
-    return json.loads(analyze_webpage(url, selected_prompt, selected_model))
+    return json.loads(
+        analyze(
+            url=url,
+            prompt=selected_prompt,
+            mode=settings.analysis_mode,
+            fixed_model=settings.fixed_model,
+            cost_model=settings.cost_model,
+            single_model=selected_model,
+        )
+    )
