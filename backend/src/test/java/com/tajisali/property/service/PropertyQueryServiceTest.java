@@ -1,5 +1,7 @@
 package com.tajisali.property.service;
 
+import com.tajisali.common.exception.BusinessException;
+import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.property.domain.Property;
 import com.tajisali.property.repository.PropertyRepository;
 import com.tajisali.settlement.domain.CostCategory;
@@ -24,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -123,6 +126,18 @@ class PropertyQueryServiceTest {
         assertThat(response.simulation().exchangeRate().jpy()).isEqualTo(100);
         assertThat(response.simulation().exchangeRate().krw()).isEqualTo(860);
         assertThat(response.simulation().livingMonths()).isEqualByComparingTo("3.2");
+    }
+
+    @Test
+    void 다른_사용자의_매물은_상세_조회할_수_없다() {
+        User user = user();
+        when(anonymousUserService.findExisting(USER_KEY)).thenReturn(Optional.of(user));
+        when(propertyRepository.findByIdAndUserId(10L, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> propertyQueryService.getPropertyDetail(10L, USER_KEY))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.PROPERTY_NOT_FOUND);
     }
 
     private User user() {

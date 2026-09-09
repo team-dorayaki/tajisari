@@ -12,6 +12,6 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
     @EntityGraph(attributePaths = "images")
     List<Property> findAllByUserIdOrderByCreatedAtDesc(Long userId);
 
-    @EntityGraph(attributePaths = {"images", "costItems"})
+    @EntityGraph(attributePaths = "images")
     Optional<Property> findByIdAndUserId(Long propertyId, Long userId);
 }
