@@ -65,6 +65,36 @@ COST_ITEM_ANALYSIS_SCHEMA = required_object(
 )
 
 
+COST_CANDIDATE_SCHEMA = required_object(
+    {
+        "raw_text": {"type": "string"},
+        "cost_name": NULLABLE_STRING,
+        "display_name": NULLABLE_STRING,
+        "applicability_condition": NULLABLE_STRING,
+        "applies_to_listing": {
+            "type": "string",
+            "enum": ["YES", "CONDITIONAL", "NO", "UNKNOWN"],
+        },
+        "timing": {
+            "type": "string",
+            "enum": [
+                "INITIAL", "MONTHLY", "RENEWAL", "MOVE_OUT",
+                "CONDITIONAL", "UNKNOWN",
+            ],
+        },
+        "destination": {
+            "type": "string",
+            "enum": [
+                "PROPERTY", "PROPERTY_COST_ITEM",
+                "REFERENCE_INFORMATION", "EXCLUDED",
+            ],
+        },
+        "target_index": NULLABLE_INTEGER,
+        "evidence": {"type": "array", "items": EVIDENCE_SCHEMA},
+    }
+)
+
+
 STATION_SCHEMA = required_object(
     {
         "line_name": NULLABLE_STRING,
@@ -165,7 +195,7 @@ OUTPUT_SCHEMA = required_object(
     {
         "analysis_metadata": required_object(
             {
-                "schema_version": {"type": "string", "enum": ["3.0"]},
+                "schema_version": {"type": "string", "enum": ["3.1"]},
                 "source_type": {"type": "string", "enum": ["IMAGE", "URL", "BOTH"]},
                 "image_count": {"type": "integer", "minimum": 0},
             }
@@ -184,6 +214,10 @@ OUTPUT_SCHEMA = required_object(
                 "cost_item_analysis": {
                     "type": "array",
                     "items": COST_ITEM_ANALYSIS_SCHEMA,
+                },
+                "cost_candidates": {
+                    "type": "array",
+                    "items": COST_CANDIDATE_SCHEMA,
                 },
                 "all_stations": {"type": "array", "items": STATION_SCHEMA},
                 "additional_fields": {
@@ -210,6 +244,7 @@ OUTPUT_SCHEMA = required_object(
                                 "listing_terms_preferred": {"type": "boolean"},
                                 "amounts_match_raw_text": {"type": "boolean"},
                                 "required_status_has_evidence": {"type": "boolean"},
+                                "cost_candidates_classified": {"type": "boolean"},
                             }
                         ),
                     }
@@ -233,6 +268,7 @@ REQUIRED_NESTED_FIELDS = {
     "analysis_details": {
         "field_analysis",
         "cost_item_analysis",
+        "cost_candidates",
         "all_stations",
         "additional_fields",
         "reference_information",

@@ -552,9 +552,7 @@ function SettlementPlanPage() {
         monthlyLivingCostInputMethod: monthlyInputMode === "default" ? "DEFAULT" : "DIRECT",
       }
       if (isEditMode) {
-        const planId = window.localStorage.getItem("tajisari.settlementPlanId")
-        if (!planId) throw new Error("저장된 정착 계획이 없습니다.")
-        await updateSettlementPlan(planId, payload)
+        await updateSettlementPlan(payload)
         await queryClient.invalidateQueries({ queryKey: ["settlement-plan"] })
         void navigate("/my")
       } else {

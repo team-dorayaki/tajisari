@@ -30,6 +30,7 @@ public class PropertyQueryService {
     private final PropertyRepository propertyRepository;
     private final SettlementPlanRepository settlementPlanRepository;
     private final AnonymousUserService anonymousUserService;
+    private final PropertyCostCalculationService propertyCostCalculationService;
 
     @Transactional(readOnly = true)
     public PropertyListResponse getProperties(String userKey) {
@@ -57,9 +58,7 @@ public class PropertyQueryService {
                 .findByUserId(user.getId())
                 .orElse(null);
 
-        long initialCost = valueOrZero(initialCostOf(property));
-        long refundableAmount = valueOrZero(property.getDeposit());
-        long confirmedMonthlyCost = monthlyCostOf(property);
+        PropertyCostCalculationResult costCalculation = propertyCostCalculationService.calculate(property);
 
         return new PropertyDetailResponse(
                 property.getId(),
@@ -84,10 +83,13 @@ public class PropertyQueryService {
                         property.getManagementFee(),
                         property.getDeposit(),
                         property.getKeyMoney(),
-                        initialCost,
-                        confirmedMonthlyCost,
-                        refundableAmount,
-                        Math.max(initialCost - refundableAmount, 0L),
+                        costCalculation.initialCost(),
+                        costCalculation.monthlyCost(),
+                        costCalculation.refundableAmount(),
+                        costCalculation.nonRefundableAmount(),
+                        costCalculation.hasUnknownInitialCosts(),
+                        costCalculation.hasUnknownMonthlyCosts(),
+                        costCalculation.hasUnclassifiedCosts(),
                         property.getCostItems().stream().map(this::toCostItem).toList()),
                 plan == null ? null : createSimulation(property, plan));
     }

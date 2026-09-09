@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Check, ChevronRight, ImageOff, LoaderCircle, Plus, Trash2 } from "lucide-react"
+import { Check, ChevronRight, House, ImageOff, LoaderCircle, Plus, Trash2 } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 
 import { BottomNav } from "@/components/layout/bottom-nav"
@@ -136,7 +136,7 @@ function PropertiesPage() {
 
         {status === "success" && properties.length === 0 && (
           <div className="flex min-h-52 flex-col items-center justify-center px-4 text-center">
-            <ImageOff aria-hidden="true" className="size-9 text-[#98a1aa]" strokeWidth={1.5} />
+            <House aria-hidden="true" className="size-9 text-[#98a1aa]" strokeWidth={1.5} />
             <p className="mt-3 text-sm font-bold">등록한 매물이 없어요</p>
             <p className="mt-1 text-xs text-[var(--text-secondary)]">관심 있는 매물을 등록해보세요.</p>
           </div>
