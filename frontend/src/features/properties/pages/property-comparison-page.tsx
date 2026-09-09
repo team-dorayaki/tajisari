@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { ArrowDown, ArrowLeft, ArrowUp, LoaderCircle, X } from "lucide-react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 
 import { BottomNav } from "@/components/layout/bottom-nav"
 import { BrandInsightCard } from "@/components/ui/brand-insight-card"
-import { fetchPropertyComparisons } from "@/features/properties/api/properties-api"
+import { fetchPropertyComparisons, updatePropertyPriorities } from "@/features/properties/api/properties-api"
 import type { PropertyComparison } from "@/features/properties/api/properties-api"
 import { cn } from "@/lib/utils"
 
@@ -34,6 +35,21 @@ function ComparisonBars({ items, field, highlightField, formatter }: { items: Co
       ))}
     </div>
   )
+}
+
+function getInitialPriorityIds(items: ComparisonItem[]) {
+  const savedPriorities = items.filter((item) => item.priorityRank !== null)
+  if (savedPriorities.length > 0) {
+    return [...items]
+      .sort((left, right) => (left.priorityRank ?? Number.POSITIVE_INFINITY) - (right.priorityRank ?? Number.POSITIVE_INFINITY))
+      .map((item) => item.propertyId)
+  }
+
+  const recommendedProperty = [...items].sort((left, right) =>
+    (left.walkMinutes ?? Number.POSITIVE_INFINITY) - (right.walkMinutes ?? Number.POSITIVE_INFINITY)
+    || (right.exclusiveAreaM2 ?? 0) - (left.exclusiveAreaM2 ?? 0),
+  )[0]
+  return [recommendedProperty.propertyId, ...items.filter((item) => item.propertyId !== recommendedProperty.propertyId).map((item) => item.propertyId)]
 }
 
 function ConditionComparison({ items }: { items: ComparisonItem[] }) {
@@ -82,6 +98,7 @@ function ConditionComparison({ items }: { items: ComparisonItem[] }) {
 
 function PropertyComparisonPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const [state, setState] = useState<LoadState>("loading")
   const [items, setItems] = useState<ComparisonItem[]>([])
@@ -89,7 +106,10 @@ function PropertyComparisonPage() {
   const [activeTab, setActiveTab] = useState<"funds" | "notes">("funds")
   const [prioritySheetOpen, setPrioritySheetOpen] = useState(false)
   const [priorityIds, setPriorityIds] = useState<string[]>([])
+  const [isSavingPriorities, setIsSavingPriorities] = useState(false)
+  const [prioritySaveError, setPrioritySaveError] = useState<string | null>(null)
   const selectedIds = useMemo(() => [...new Set((searchParams.get("ids") ?? "").split(",").filter(Boolean))].slice(0, 3), [searchParams])
+  const shouldOpenPrioritySheet = searchParams.get("priority") === "true"
   const hasValidSelection = selectedIds.length >= 2
   const displayState = hasValidSelection ? state : "error"
 
@@ -108,6 +128,11 @@ function PropertyComparisonPage() {
         setItems(comparisons)
         setErrorMessage(null)
         setState("success")
+        if (shouldOpenPrioritySheet) {
+          setPriorityIds(getInitialPriorityIds(comparisons))
+          setPrioritySaveError(null)
+          setPrioritySheetOpen(true)
+        }
       })
       .catch((error: unknown) => {
         if (!active) return
@@ -116,7 +141,7 @@ function PropertyComparisonPage() {
       })
 
     return () => { active = false }
-  }, [hasValidSelection, selectedIds])
+  }, [hasValidSelection, selectedIds, shouldOpenPrioritySheet])
 
   const lowestInitialCost = items.find((item) => item.lowestInitialSettlementCost) ?? null
   const greatestBalanceAfterMoveIn = Math.max(...items.map((item) => item.balanceAfterMoveIn))
@@ -125,7 +150,8 @@ function PropertyComparisonPage() {
   const comparisonGridStyle = { gridTemplateColumns: `96px repeat(${items.length}, minmax(0, 1fr))` }
 
   function openPrioritySheet() {
-    setPriorityIds(items.map((item) => item.propertyId))
+    setPriorityIds(getInitialPriorityIds(items))
+    setPrioritySaveError(null)
     setPrioritySheetOpen(true)
   }
 
@@ -138,6 +164,24 @@ function PropertyComparisonPage() {
       ;[next[index], next[nextIndex]] = [next[nextIndex], next[index]]
       return next
     })
+  }
+
+  async function savePriorities() {
+    setIsSavingPriorities(true)
+    setPrioritySaveError(null)
+    try {
+      await updatePropertyPriorities(priorityIds[0] ?? null, priorityIds[1] ?? null)
+      setPrioritySheetOpen(false)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["home-progress"] }),
+        queryClient.invalidateQueries({ queryKey: ["priority-properties"] }),
+      ])
+      void navigate("/home")
+    } catch (error) {
+      setPrioritySaveError(error instanceof Error ? error.message : "우선순위를 저장하지 못했어요. 다시 시도해주세요.")
+    } finally {
+      setIsSavingPriorities(false)
+    }
   }
 
   return (
@@ -194,14 +238,15 @@ function PropertyComparisonPage() {
       {displayState === "success" && <div className="fixed inset-x-0 bottom-[calc(100px+env(safe-area-inset-bottom))] z-20 mx-auto w-full max-w-[430px] px-4"><button type="button" onClick={openPrioritySheet} className="flex h-12 w-full items-center justify-center rounded-lg bg-[var(--brand)] text-sm font-bold text-white shadow-sm">매물 우선순위 정하기</button></div>}
       <BottomNav />
       {prioritySheetOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30" role="presentation" onMouseDown={() => setPrioritySheetOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30" role="presentation" onMouseDown={() => { if (!isSavingPriorities) setPrioritySheetOpen(false) }}>
           <section role="dialog" aria-modal="true" aria-labelledby="priority-sheet-title" className="w-full max-w-[430px] rounded-t-3xl bg-white px-5 pb-[calc(20px+env(safe-area-inset-bottom))] pt-3 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
             <div className="mx-auto h-1 w-10 rounded-full bg-[#dde2e5]" />
-            <div className="mt-5 flex items-start justify-between"><div><h2 id="priority-sheet-title" className="text-lg font-bold">매물 우선순위 정하기</h2><p className="mt-1 text-xs text-[var(--text-secondary)]">마음에 드는 순서대로 정렬해주세요.</p></div><button type="button" onClick={() => setPrioritySheetOpen(false)} className="grid size-10 place-items-center text-[var(--text-secondary)]" aria-label="닫기"><X className="size-5" /></button></div>
+            <div className="mt-5 flex items-start justify-between"><div><h2 id="priority-sheet-title" className="text-lg font-bold">매물 우선순위 정하기</h2><p className="mt-1 text-xs text-[var(--text-secondary)]">마음에 드는 순서대로 정렬해주세요. 1·2순위만 저장돼요.</p></div><button type="button" disabled={isSavingPriorities} onClick={() => setPrioritySheetOpen(false)} className="grid size-10 place-items-center text-[var(--text-secondary)] disabled:opacity-40" aria-label="닫기"><X className="size-5" /></button></div>
             <ol className="mt-5 divide-y divide-[#edf0f2] rounded-xl border border-[#e7ebed]">
-              {priorityIds.map((id, index) => { const item = items.find((candidate) => candidate.propertyId === id); if (!item) return null; return <li key={id} className="flex items-center gap-3 px-3 py-3"><span className={cn("grid size-7 shrink-0 place-items-center rounded-full text-sm font-bold", index === 0 ? "bg-[var(--brand)] text-white" : "bg-[#eef1f2] text-[var(--text-secondary)]")}>{index + 1}</span>{item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className="size-12 rounded-lg object-cover" />}<span className="min-w-0 flex-1 truncate text-sm font-bold">{item.name}</span><div className="flex items-center gap-0.5"><button type="button" disabled={index === 0} onClick={() => movePriority(id, -1)} className="grid size-9 place-items-center rounded-lg text-[var(--text-secondary)] disabled:opacity-25" aria-label="위로 이동"><ArrowUp className="size-4" /></button><button type="button" disabled={index === priorityIds.length - 1} onClick={() => movePriority(id, 1)} className="grid size-9 place-items-center rounded-lg text-[var(--text-secondary)] disabled:opacity-25" aria-label="아래로 이동"><ArrowDown className="size-4" /></button></div></li> })}
+              {priorityIds.map((id, index) => { const item = items.find((candidate) => candidate.propertyId === id); if (!item) return null; return <li key={id} className="flex items-center gap-3 px-3 py-3"><span className={cn("grid size-7 shrink-0 place-items-center rounded-full text-sm font-bold", index === 0 ? "bg-[var(--brand)] text-white" : "bg-[#eef1f2] text-[var(--text-secondary)]")}>{index + 1}</span>{item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className="size-12 rounded-lg object-cover" />}<span className="min-w-0 flex-1 truncate text-sm font-bold">{item.name}</span><div className="flex items-center gap-0.5"><button type="button" disabled={isSavingPriorities || index === 0} onClick={() => movePriority(id, -1)} className="grid size-9 place-items-center rounded-lg text-[var(--text-secondary)] disabled:opacity-25" aria-label="위로 이동"><ArrowUp className="size-4" /></button><button type="button" disabled={isSavingPriorities || index === priorityIds.length - 1} onClick={() => movePriority(id, 1)} className="grid size-9 place-items-center rounded-lg text-[var(--text-secondary)] disabled:opacity-25" aria-label="아래로 이동"><ArrowDown className="size-4" /></button></div></li> })}
             </ol>
-            <button type="button" onClick={() => setPrioritySheetOpen(false)} className="mt-5 flex h-12 w-full items-center justify-center rounded-lg bg-[var(--brand)] text-sm font-bold text-white">이 순서로 저장하기</button>
+            {prioritySaveError && <p className="mt-3 text-center text-xs font-medium text-[#ef5350]">{prioritySaveError}</p>}
+            <button type="button" disabled={isSavingPriorities} onClick={() => void savePriorities()} className="mt-5 flex h-12 w-full items-center justify-center rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:opacity-60">{isSavingPriorities ? "저장 중..." : "이 순서로 저장하기"}</button>
           </section>
         </div>
       )}

@@ -12,6 +12,7 @@ type ExcludedCost = {
 type PropertySummary = {
   id: string
   name: string
+  priorityRank: 1 | 2 | null
   area: string
   moveInDate: string
   rent: number
@@ -136,6 +137,7 @@ type PropertyComparison = {
   propertyId: string
   name: string
   thumbnailUrl: string | null
+  priorityRank: 1 | 2 | null
   monthlyHousingCost: number
   initialSettlementCost: number
   balanceAfterMoveIn: number
@@ -160,6 +162,7 @@ type PropertyComparisonPayload = {
     propertyId: number
     propertyName: string | null
     thumbnailUrl: string | null
+    priorityRank: number | null
     conditions: { prefecture: string | null; city: string | null; nearestStation: string | null; walkMinutes: number | null; exclusiveAreaM2: number | null; contractPeriodMonths: number | null }
     costs: { initialSettlementCost: number | null; refundableAmount: number | null; nonRefundableAmount: number | null; unknownCostItemCount: number }
     simulation: { balanceAfterMoveIn: number | null; monthlyHousingCost: number | null; livingMonths: number | null; unlimited: boolean } | null
@@ -192,6 +195,7 @@ async function fetchProperties(): Promise<PropertySummary[]> {
   return body.data.properties.map((property) => ({
     id: String(property.propertyId),
     name: property.propertyName?.trim() || "이름 없는 매물",
+    priorityRank: property.priorityRank,
     area: "",
     moveInDate: "",
     rent: property.rent ?? 0,
@@ -245,6 +249,27 @@ async function deleteProperties(propertyIds: string[]): Promise<void> {
   }
 }
 
+async function updatePropertyPriorities(firstPriorityPropertyId: string | null, secondPriorityPropertyId: string | null): Promise<void> {
+  const propertyIds = [firstPriorityPropertyId, secondPriorityPropertyId].filter((propertyId): propertyId is string => propertyId !== null)
+  if (propertyIds.some((propertyId) => !Number.isSafeInteger(Number(propertyId)))) {
+    throw new Error("우선순위를 저장할 매물 정보를 확인할 수 없어요.")
+  }
+
+  const response = await fetch("/api/properties/priorities", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      firstPriorityPropertyId: firstPriorityPropertyId === null ? null : Number(firstPriorityPropertyId),
+      secondPriorityPropertyId: secondPriorityPropertyId === null ? null : Number(secondPriorityPropertyId),
+    }),
+  })
+  const body = await response.json().catch(() => null) as ApiResponse<unknown> | null
+  if (!response.ok || !body?.success) {
+    throw new Error(body?.error?.message ?? `우선순위를 저장하지 못했습니다. (${response.status})`)
+  }
+}
+
 async function fetchPropertyComparisons(propertyIds: string[]): Promise<PropertyComparison[]> {
   const numericIds = propertyIds.map(Number)
   if (numericIds.some((id) => !Number.isSafeInteger(id))) {
@@ -264,6 +289,7 @@ async function fetchPropertyComparisons(propertyIds: string[]): Promise<Property
     propertyId: String(property.propertyId),
     name: property.propertyName?.trim() || "이름 없는 매물",
     thumbnailUrl: property.thumbnailUrl,
+    priorityRank: property.priorityRank === 1 || property.priorityRank === 2 ? property.priorityRank : null,
     monthlyHousingCost: property.simulation?.monthlyHousingCost ?? 0,
     initialSettlementCost: property.costs.initialSettlementCost ?? 0,
     balanceAfterMoveIn: property.simulation?.balanceAfterMoveIn ?? 0,
@@ -287,5 +313,5 @@ async function fetchPropertyComparisons(propertyIds: string[]): Promise<Property
   }))
 }
 
-export { deleteProperties, fetchProperties, fetchProperty, fetchPropertyComparisons }
+export { deleteProperties, fetchProperties, fetchProperty, fetchPropertyComparisons, updatePropertyPriorities }
 export type { ExcludedCost, PropertyComparison, PropertyDetail, PropertyDetailCostItem, PropertyImage, PropertySummary }
