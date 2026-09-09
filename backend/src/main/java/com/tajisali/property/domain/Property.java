@@ -115,4 +115,8 @@ public class Property {
     public void assignOwner(User user) {
         this.user = Objects.requireNonNull(user, "user must not be null");
     }
+
+    public void updatePriorityRank(Integer priorityRank) {
+        this.priorityRank = priorityRank;
+    }
 }
