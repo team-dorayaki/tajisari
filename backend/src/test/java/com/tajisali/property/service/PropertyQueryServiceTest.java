@@ -133,13 +133,14 @@ class PropertyQueryServiceTest {
 
         assertThat(response.propertyId()).isEqualTo(10L);
         assertThat(response.settlementPlanId()).isEqualTo(7L);
-        assertThat(response.costAnalysis().refundableAmount()).isEqualTo(65_000L);
-        assertThat(response.costAnalysis().nonRefundableAmount()).isEqualTo(180_000L);
-        assertThat(response.costAnalysis().initialCost()).isEqualTo(245_000L);
-        assertThat(response.costAnalysis().monthlyCost()).isEqualTo(70_000L);
-        assertThat(response.costAnalysis().hasUnknownInitialCosts()).isFalse();
-        assertThat(response.costAnalysis().hasUnknownMonthlyCosts()).isFalse();
-        assertThat(response.costAnalysis().hasUnclassifiedCosts()).isFalse();
+        assertThat(response.property().rent()).isEqualTo(65_000L);
+        assertThat(response.costAnalysis().summary().refundableAmount()).isEqualTo(65_000L);
+        assertThat(response.costAnalysis().summary().nonRefundableAmount()).isEqualTo(180_000L);
+        assertThat(response.costAnalysis().costGroups().monthly()).hasSize(2);
+        assertThat(response.costAnalysis().costGroups().moveIn()).hasSize(2);
+        assertThat(response.costAnalysis().costGroups().optional()).isEmpty();
+        assertThat(response.costAnalysis().costGroups().future()).isEmpty();
+        assertThat(response.costAnalysis().excludedCosts()).isEmpty();
         assertThat(response.simulation().exchangeRate().jpy()).isEqualTo(100);
         assertThat(response.simulation().exchangeRate().krw()).isEqualTo(860);
         assertThat(response.simulation().livingMonths()).isEqualByComparingTo("3.2");

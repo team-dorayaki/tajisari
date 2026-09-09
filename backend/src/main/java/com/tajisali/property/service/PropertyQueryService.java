@@ -3,6 +3,7 @@ package com.tajisali.property.service;
 import com.tajisali.exchange.service.ExchangeRateService;
 import com.tajisali.property.domain.Property;
 import com.tajisali.property.domain.CostTiming;
+import com.tajisali.property.domain.ObligationStatus;
 import com.tajisali.property.domain.PropertyCostItem;
 import com.tajisali.property.dto.PropertyDetailResponse;
 import com.tajisali.property.dto.PropertyListResponse;
@@ -17,6 +18,9 @@ import com.tajisali.user.service.AnonymousUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -55,6 +59,8 @@ public class PropertyQueryService {
                 .orElse(null);
 
         PropertyCostCalculationResult costCalculation = propertyCostCalculationService.calculate(property);
+        PropertyDetailCostPresentation costPresentation = createCostPresentation(
+                property, costCalculation);
 
         return new PropertyDetailResponse(
                 property.getId(),
@@ -70,39 +76,155 @@ public class PropertyQueryService {
                         property.getWalkMinutes(),
                         property.getAvailableFrom(),
                         property.getContractPeriodMonths(),
-                        property.getPriorityRank()),
+                        property.getPriorityRank(),
+                        property.getRent(),
+                        property.getManagementFee()),
                 property.getImages().stream()
-                        .map(image -> image.getStorageKey())
+                        .map(image -> new PropertyDetailResponse.PropertyImage(
+                                image.getId(), image.getStorageKey(), image.getImageOrder()))
                         .toList(),
                 new PropertyDetailResponse.CostAnalysis(
-                        property.getRent(),
-                        property.getManagementFee(),
-                        property.getDeposit(),
-                        property.getKeyMoney(),
-                        property.getConfirmedInitialCost(),
-                        property.getConfirmedMonthlyCost(),
-                        costCalculation.refundableAmount(),
-                        costCalculation.nonRefundableAmount(),
-                        costCalculation.hasUnknownInitialCosts(),
-                        costCalculation.hasUnknownMonthlyCosts(),
-                        costCalculation.hasUnclassifiedCosts(),
-                        property.getCostItems().stream().map(this::toCostItem).toList()),
+                        costPresentation.summary(),
+                        costPresentation.costGroups(),
+                        costPresentation.excludedCosts()),
                 createSimulation(property, plan));
     }
 
     private PropertyDetailResponse.CostItem toCostItem(PropertyCostItem item) {
+        boolean includedInTotal = isIncludedInCurrentTotal(item);
         return new PropertyDetailResponse.CostItem(
-                item.getId(),
-                item.getRawName(),
+                String.valueOf(item.getId()),
                 item.getDisplayName(),
                 item.getAmount(),
                 item.getRawValue(),
-                item.getObligationStatus(),
-                item.isIncludedInCalculation(),
-                item.isCalculated() && item.getAmount() != null
-                        && (item.getTiming() == CostTiming.INITIAL
-                        || item.getTiming() == CostTiming.MONTHLY),
+                item.getObligationStatus() == ObligationStatus.OPTIONAL,
+                item.getObligationStatus() != ObligationStatus.OPTIONAL
+                        || item.isIncludedInCalculation(),
+                includedInTotal,
+                item.getTiming() == CostTiming.CONDITIONAL,
                 item.getTiming());
+    }
+
+    private PropertyDetailCostPresentation createCostPresentation(
+            Property property,
+            PropertyCostCalculationResult calculation) {
+        List<PropertyDetailResponse.CostItem> monthlyItems = new ArrayList<>();
+        List<PropertyDetailResponse.CostItem> moveInItems = new ArrayList<>();
+        List<PropertyDetailResponse.CostItem> optionalItems = new ArrayList<>();
+        List<PropertyDetailResponse.CostItem> futureItems = new ArrayList<>();
+        List<PropertyDetailResponse.ExcludedCost> excludedCosts = new ArrayList<>();
+
+        addBaseCost(monthlyItems, "rent", "월세(家賃)", property.getRent(), CostTiming.MONTHLY);
+        addBaseCost(monthlyItems, "management", "관리비·공익비",
+                property.getManagementFee(), CostTiming.MONTHLY);
+        addBaseCost(moveInItems, "deposit", "시키킨(敷金)",
+                property.getDeposit(), CostTiming.INITIAL);
+        addBaseCost(moveInItems, "key-money", "레이킨(礼金)",
+                property.getKeyMoney(), CostTiming.INITIAL);
+
+        for (PropertyCostItem item : property.getCostItems()) {
+            if (isExcluded(item)) {
+                excludedCosts.add(new PropertyDetailResponse.ExcludedCost(
+                        item.getDisplayName(), categoryLabel(item.getTiming()), exclusionReason(item)));
+                continue;
+            }
+
+            PropertyDetailResponse.CostItem displayItem = toCostItem(item);
+            if (item.getTiming() == CostTiming.MONTHLY) {
+                if (item.getObligationStatus() != ObligationStatus.OPTIONAL
+                        || item.isIncludedInCalculation()) {
+                    monthlyItems.add(displayItem);
+                }
+            } else if (item.getTiming() == CostTiming.INITIAL
+                    && item.getObligationStatus() == ObligationStatus.OPTIONAL) {
+                if (item.isIncludedInCalculation()) {
+                    optionalItems.add(displayItem);
+                }
+            } else if (item.getTiming() == CostTiming.INITIAL) {
+                moveInItems.add(displayItem);
+            } else {
+                futureItems.add(displayItem);
+            }
+        }
+
+        long contractMoveInCost = sumIncluded(moveInItems);
+        long selectedOptionalCost = sumIncluded(optionalItems);
+        long estimatedMoveOutCost = futureItems.stream()
+                .filter(item -> item.timing() == CostTiming.MOVE_OUT)
+                .filter(item -> item.amount() != null)
+                .filter(item -> !item.optional() || item.selected())
+                .mapToLong(PropertyDetailResponse.CostItem::amount)
+                .sum();
+
+        PropertyDetailResponse.CostSummary summary = new PropertyDetailResponse.CostSummary(
+                calculation.initialCost(),
+                contractMoveInCost,
+                calculation.monthlyCost(),
+                contractMoveInCost,
+                selectedOptionalCost,
+                calculation.refundableAmount(),
+                calculation.nonRefundableAmount(),
+                estimatedMoveOutCost);
+
+        return new PropertyDetailCostPresentation(
+                summary,
+                new PropertyDetailResponse.CostGroups(
+                        List.copyOf(monthlyItems),
+                        List.copyOf(moveInItems),
+                        List.copyOf(optionalItems),
+                        List.copyOf(futureItems)),
+                List.copyOf(excludedCosts));
+    }
+
+    private void addBaseCost(
+            List<PropertyDetailResponse.CostItem> target,
+            String id,
+            String label,
+            Long amount,
+            CostTiming timing) {
+        target.add(new PropertyDetailResponse.CostItem(
+                id, label, amount, null, false, true, amount != null,
+                false, timing));
+    }
+
+    private long sumIncluded(List<PropertyDetailResponse.CostItem> items) {
+        return items.stream()
+                .filter(PropertyDetailResponse.CostItem::includedInTotal)
+                .filter(item -> item.amount() != null)
+                .mapToLong(PropertyDetailResponse.CostItem::amount)
+                .sum();
+    }
+
+    private boolean isIncludedInCurrentTotal(PropertyCostItem item) {
+        return item.getAmount() != null
+                && (item.getTiming() == CostTiming.INITIAL
+                || item.getTiming() == CostTiming.MONTHLY)
+                && item.isCalculated();
+    }
+
+    private boolean isExcluded(PropertyCostItem item) {
+        return item.getAmount() == null
+                || item.getObligationStatus() == ObligationStatus.UNKNOWN
+                || item.getTiming() == CostTiming.UNKNOWN;
+    }
+
+    private String exclusionReason(PropertyCostItem item) {
+        if (item.getAmount() == null) {
+            return "금액 미확인";
+        }
+        if (item.getObligationStatus() == ObligationStatus.UNKNOWN) {
+            return "필수 여부 미확인";
+        }
+        return "발생 시점 미확인";
+    }
+
+    private String categoryLabel(CostTiming timing) {
+        return switch (timing) {
+            case INITIAL -> "계약·입주 시";
+            case MONTHLY -> "매월 반복비용";
+            case RENEWAL, MOVE_OUT, CONDITIONAL -> "계약 후";
+            case UNKNOWN -> "분류 미확인";
+        };
     }
 
     private PropertyDetailResponse.Simulation createSimulation(
@@ -157,6 +279,12 @@ public class PropertyQueryService {
                 simulation == null ? null : simulation.livingMonths(),
                 property.getPriorityRank(),
                 thumbnailUrl);
+    }
+
+    private record PropertyDetailCostPresentation(
+            PropertyDetailResponse.CostSummary summary,
+            PropertyDetailResponse.CostGroups costGroups,
+            List<PropertyDetailResponse.ExcludedCost> excludedCosts) {
     }
 
 }

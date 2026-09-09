@@ -1,7 +1,6 @@
 package com.tajisali.property.dto;
 
 import com.tajisali.property.domain.CostTiming;
-import com.tajisali.property.domain.ObligationStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,7 +10,7 @@ public record PropertyDetailResponse(
         Long propertyId,
         Long settlementPlanId,
         PropertyInfo property,
-        List<String> imageUrls,
+        List<PropertyImage> images,
         CostAnalysis costAnalysis,
         Simulation simulation) {
 
@@ -26,34 +25,51 @@ public record PropertyDetailResponse(
             Integer walkMinutes,
             LocalDate availableFrom,
             Integer contractPeriodMonths,
-            Integer priorityRank) {
+            Integer priorityRank,
+            Long rent,
+            Long managementFee) {
+    }
+
+    public record PropertyImage(Long imageId, String imageUrl, int order) {
     }
 
     public record CostAnalysis(
-            Long rent,
-            Long managementFee,
-            Long deposit,
-            Long keyMoney,
+            CostSummary summary,
+            CostGroups costGroups,
+            List<ExcludedCost> excludedCosts) {
+    }
+
+    public record CostSummary(
             Long initialCost,
+            long minimumInitialCost,
             Long monthlyCost,
+            long contractMoveInCost,
+            long selectedOptionalCost,
             Long refundableAmount,
             Long nonRefundableAmount,
-            boolean hasUnknownInitialCosts,
-            boolean hasUnknownMonthlyCosts,
-            boolean hasUnclassifiedCosts,
-            List<CostItem> costItems) {
+            long estimatedMoveOutCost) {
+    }
+
+    public record CostGroups(
+            List<CostItem> monthly,
+            List<CostItem> moveIn,
+            List<CostItem> optional,
+            List<CostItem> future) {
     }
 
     public record CostItem(
-            Long costItemId,
-            String rawName,
-            String displayName,
+            String id,
+            String label,
             Long amount,
-            String rawValue,
-            ObligationStatus obligationStatus,
-            boolean includedInCalculation,
-            boolean calculated,
+            String originalText,
+            boolean optional,
+            boolean selected,
+            boolean includedInTotal,
+            boolean conditional,
             CostTiming timing) {
+    }
+
+    public record ExcludedCost(String label, String category, String reason) {
     }
 
     public record Simulation(
