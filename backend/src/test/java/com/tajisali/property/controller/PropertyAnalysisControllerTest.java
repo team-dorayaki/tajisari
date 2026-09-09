@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 import java.math.BigDecimal;
+import jakarta.servlet.http.Cookie;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,6 +25,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = PropertyController.class)
 @Import({JacksonConfig.class, GlobalExceptionHandler.class})
 class PropertyControllerTest {
+
+    private static final String USER_KEY = "00000000-0000-0000-0000-000000000001";
 
     @Autowired
     private MockMvc mockMvc;
@@ -36,10 +39,11 @@ class PropertyControllerTest {
         var summary = new PropertyListResponse.PropertySummary(
                 10L, "요코하마 스튜디오", 65_000L, 245_000L,
                 new java.math.BigDecimal("3.2"), 1, "properties/10/thumbnail.jpg");
-        when(propertyQueryService.getProperties())
+        when(propertyQueryService.getProperties(USER_KEY))
                 .thenReturn(new PropertyListResponse(1, List.of(summary)));
 
-        mockMvc.perform(get("/api/properties"))
+        mockMvc.perform(get("/api/properties")
+                        .cookie(new Cookie("tajisari_anonymous_user", USER_KEY)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.totalCount").value(1))
@@ -53,7 +57,7 @@ class PropertyControllerTest {
                         .value("properties/10/thumbnail.jpg"))
                 .andExpect(jsonPath("$.error").value((Object) null));
 
-        verify(propertyQueryService).getProperties();
+        verify(propertyQueryService).getProperties(USER_KEY);
     }
 
     @Test
@@ -75,9 +79,10 @@ class PropertyControllerTest {
                         913_953L, 307_000L, 606_953L,
                         70_000L, 115_000L, 185_000L,
                         new BigDecimal("3.2"), 12, -1_613_047L, 1_613_047L));
-        when(propertyQueryService.getPropertyDetail(10L)).thenReturn(response);
+        when(propertyQueryService.getPropertyDetail(10L, USER_KEY)).thenReturn(response);
 
-        mockMvc.perform(get("/api/properties/10"))
+        mockMvc.perform(get("/api/properties/10")
+                        .cookie(new Cookie("tajisari_anonymous_user", USER_KEY)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.propertyId").value(10))
@@ -87,6 +92,6 @@ class PropertyControllerTest {
                 .andExpect(jsonPath("$.data.simulation.exchangeRate.krw").value(860))
                 .andExpect(jsonPath("$.data.simulation.livingMonths").value(3.2));
 
-        verify(propertyQueryService).getPropertyDetail(10L);
+        verify(propertyQueryService).getPropertyDetail(10L, USER_KEY);
     }
 }

@@ -10,6 +10,7 @@ public interface SettlementPlanRepository extends JpaRepository<SettlementPlan, 
 
     boolean existsByUserId(Long userId);
 
+    @EntityGraph(attributePaths = "costItems")
     Optional<SettlementPlan> findByUserId(Long userId);
 
     @EntityGraph(attributePaths = "costItems")

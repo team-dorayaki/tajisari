@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -16,18 +17,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class PropertyController {
 
+    private static final String ANONYMOUS_USER_COOKIE = "tajisari_anonymous_user";
+
     private final PropertyQueryService propertyQueryService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<PropertyListResponse>> getProperties() {
+    public ResponseEntity<ApiResponse<PropertyListResponse>> getProperties(
+            @CookieValue(name = ANONYMOUS_USER_COOKIE, required = false) String userKey) {
         return ResponseEntity.ok(ApiResponse.success(
-                propertyQueryService.getProperties()));
+                propertyQueryService.getProperties(userKey)));
     }
 
     @GetMapping("/{propertyId}")
     public ResponseEntity<ApiResponse<PropertyDetailResponse>> getPropertyDetail(
-            @PathVariable Long propertyId) {
+            @PathVariable Long propertyId,
+            @CookieValue(name = ANONYMOUS_USER_COOKIE, required = false) String userKey) {
         return ResponseEntity.ok(ApiResponse.success(
-                propertyQueryService.getPropertyDetail(propertyId)));
+                propertyQueryService.getPropertyDetail(propertyId, userKey)));
     }
 }

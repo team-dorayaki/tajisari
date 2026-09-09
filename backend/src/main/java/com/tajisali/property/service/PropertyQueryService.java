@@ -14,6 +14,8 @@ import com.tajisali.settlement.domain.SettlementPlanCostItem;
 import com.tajisali.settlement.repository.SettlementPlanRepository;
 import com.tajisali.common.exception.BusinessException;
 import com.tajisali.common.exception.ErrorCode;
+import com.tajisali.user.domain.User;
+import com.tajisali.user.service.AnonymousUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,24 +29,32 @@ public class PropertyQueryService {
 
     private final PropertyRepository propertyRepository;
     private final SettlementPlanRepository settlementPlanRepository;
+    private final AnonymousUserService anonymousUserService;
 
     @Transactional(readOnly = true)
-    public PropertyListResponse getProperties() {
+    public PropertyListResponse getProperties(String userKey) {
+        var user = anonymousUserService.findExisting(userKey);
+        if (user.isEmpty()) {
+            return new PropertyListResponse(0, java.util.List.of());
+        }
+
         SettlementPlan settlementPlan = settlementPlanRepository
-                .findTopByOrderByCreatedAtDesc()
+                .findByUserId(user.get().getId())
                 .orElse(null);
-        var properties = propertyRepository.findAllByOrderByCreatedAtDesc().stream()
+        var properties = propertyRepository.findAllByUserIdOrderByCreatedAtDesc(user.get().getId()).stream()
                 .map(property -> toSummary(property, settlementPlan))
                 .toList();
         return new PropertyListResponse(properties.size(), properties);
     }
 
     @Transactional(readOnly = true)
-    public PropertyDetailResponse getPropertyDetail(Long propertyId) {
-        Property property = propertyRepository.findById(propertyId)
+    public PropertyDetailResponse getPropertyDetail(Long propertyId, String userKey) {
+        User user = anonymousUserService.findExisting(userKey)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROPERTY_NOT_FOUND));
+        Property property = propertyRepository.findByIdAndUserId(propertyId, user.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROPERTY_NOT_FOUND));
         SettlementPlan plan = settlementPlanRepository
-                .findTopByOrderByCreatedAtDesc()
+                .findByUserId(user.getId())
                 .orElse(null);
 
         long initialCost = valueOrZero(initialCostOf(property));

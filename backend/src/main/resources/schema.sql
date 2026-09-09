@@ -10,6 +10,7 @@ CREATE TABLE users (
 
 CREATE TABLE property (
     property_id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id BIGINT NOT NULL COMMENT '매물 소유 익명 사용자 ID',
     source_site VARCHAR(50) NULL COMMENT '예: SUUMO, LEOPALACE21, UR임대',
     source_url VARCHAR(2048) NULL,
     source_url_hash BINARY(32)
@@ -34,7 +35,9 @@ CREATE TABLE property (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT pk_property PRIMARY KEY (property_id),
-    CONSTRAINT uk_property_source_url UNIQUE (source_url_hash),
+    CONSTRAINT fk_property_user
+        FOREIGN KEY (user_id) REFERENCES users (user_id),
+    CONSTRAINT uk_property_user_source_url UNIQUE (user_id, source_url_hash),
     CONSTRAINT chk_property_exclusive_area CHECK (exclusive_area_m2 IS NULL OR exclusive_area_m2 >= 0),
     CONSTRAINT chk_property_walk_minutes CHECK (walk_minutes IS NULL OR walk_minutes >= 0),
     CONSTRAINT chk_property_amounts CHECK (
@@ -50,7 +53,8 @@ CREATE TABLE property (
         CHECK (contract_period_months IS NULL OR contract_period_months > 0),
     CONSTRAINT chk_property_priority_rank
         CHECK (priority_rank IS NULL OR priority_rank IN (1, 2)),
-    CONSTRAINT uk_property_priority_rank UNIQUE (priority_rank)
+    CONSTRAINT uk_property_user_priority_rank UNIQUE (user_id, priority_rank),
+    INDEX idx_property_user_created_at (user_id, created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
