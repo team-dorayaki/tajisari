@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from google import genai
+from PIL import Image, ImageChops, UnidentifiedImageError
 
 
 logger = logging.getLogger(__name__)
@@ -468,7 +469,7 @@ def analyze_webpage(url: str, prompt: str, model: str) -> str:
 
     url_prompt = COMPACT_URL_PROMPT if prompt == DEFAULT_PROMPT else prompt
     request_text = (
-        f"{url_prompt}\nURL Context 도구로 다음 공개 웹페이지를 직접 읽고 "
+        f"{url_prompt}\n{SCHEMA_GUIDANCE}\nURL Context 도구로 다음 공개 웹페이지를 직접 읽고 "
         f"해당 페이지에서 확인한 내용만 분석하세요.\n분석 대상 URL: {url}"
     )
     logger.info("URL Context 요청 prompt_chars=%d model=%s", len(request_text), model)
@@ -779,23 +780,42 @@ def encode_image(image_path: Path) -> dict:
     }
 
 
+def trim_white_margin(image_path: Path) -> None:
+    """Remove near-white outer margins so listing text occupies more pixels."""
+    try:
+        with Image.open(image_path) as source:
+            image = source.convert("RGB")
+            background = Image.new("RGB", image.size, (255, 255, 255))
+            difference = ImageChops.difference(image, background).convert("L")
+            difference = difference.point(lambda value: 255 if value > 12 else 0)
+            box = difference.getbbox()
+            if box is None or box == (0, 0, image.width, image.height):
+                return
+            left, top, right, bottom = box
+            padding = 12
+            image.crop((max(0, left - padding), max(0, top - padding),
+                        min(image.width, right + padding), min(image.height, bottom + padding))).save(image_path)
+    except UnidentifiedImageError:
+        return
+
+
 def extract_direct_yen_amounts(raw_value: object) -> set[int]:
     """원문에 직접 표시된 엔화 정수만 추출한다."""
     text = str(raw_value or "").strip()
-    number_pattern = r"\d{1,3}(?:,\d{3})+|\d+"
+    number_pattern = r"\d{1,3}(?:(?:,|\s)\d{3})+|\d+"
     matches = [
         prefix or suffix
         for prefix, suffix in re.findall(
             rf"[¥￥]\s*({number_pattern})|({number_pattern})\s*(?:円|엔)", text
         )
     ]
-    amounts = {int(value.replace(",", "")) for value in matches}
+    amounts = {int(re.sub(r"[,\s]", "", value)) for value in matches}
     for value in re.findall(r"(?<![\d.])(\d+(?:\.\d+)?)\s*万円", text):
         yen = Decimal(value) * 10000
         if yen == yen.to_integral_value():
             amounts.add(int(yen))
     if not matches and re.fullmatch(r"[\d,]+", text):
-        amounts.add(int(text.replace(",", "")))
+        amounts.add(int(re.sub(r"[,\s]", "", text)))
     return amounts
 
 
@@ -882,6 +902,15 @@ def split_compound_cost_candidates(cost_candidates: list[dict]) -> list[dict]:
     for candidate in cost_candidates:
         raw_text = str(candidate.get("raw_text") or "")
         parts = [part.strip() for part in re.split(r"\s*/\s*", raw_text) if part.strip()]
+        # A slash may attach a payment period (e.g. /毎月), not a new fee.
+        joined_parts = []
+        for part in parts:
+            has_amount = bool(re.search(r"\d.*(?:円|엔|[%％])|[¥￥]\s*\d", part))
+            if joined_parts and not has_amount:
+                joined_parts[-1] += '/' + part
+            else:
+                joined_parts.append(part)
+        parts = joined_parts
         timed_parts = [(part, infer_cost_timing(part)) for part in parts]
         if len(parts) < 2 or sum(timing != "UNKNOWN" for _, timing in timed_parts) < 2:
             result.append(candidate)
@@ -906,6 +935,28 @@ def candidate_direct_amount(raw_text: str) -> int | None:
         return None
     amounts = extract_direct_yen_amounts(raw_text)
     return next(iter(amounts)) if len(amounts) == 1 else None
+
+
+def split_facility_fields(additional_fields: list[dict]) -> list[dict]:
+    """Facility lists are exposed as individual v3 additional fields."""
+    result = []
+    for field in additional_fields:
+        raw_value = str(field.get("raw_value") or "")
+        if field.get("category") != "FACILITY":
+            result.append(field)
+            continue
+        parts = [part.strip() for part in re.split(r"[、,\n]+", raw_value) if part.strip()]
+        if len(parts) < 2:
+            result.append(field)
+            continue
+        for part in parts:
+            item = deepcopy(field)
+            item["raw_name"] = part
+            item["display_name"] = part
+            item["value"] = part
+            item["raw_value"] = part
+            result.append(item)
+    return result
 
 
 FIXED_COST_FIELD_ALIASES = {
@@ -1127,10 +1178,15 @@ def reconcile_fixed_cost_candidates(
 def apply_semantic_checks(data: dict) -> None:
     """DB 저장형 결과에 대표 역, 비용 중복과 계산 금지 규칙을 적용한다."""
     details = data.setdefault("analysis_details", {})
+    details["additional_fields"] = split_facility_fields(
+        [item for item in details.setdefault("additional_fields", []) if isinstance(item, dict)]
+    )
     validation = details.setdefault("validation", {})
     warnings = validation.setdefault("warnings", [])
     unknown_fields = validation.setdefault("unknown_fields", [])
     property_fields = data.setdefault("property", {})
+    if property_fields.get("nearest_station") is not None and property_fields.get("walk_minutes") is None:
+        property_fields["nearest_station"] = None
     field_analysis = details.setdefault("field_analysis", [])
 
     # URL 분석에서 모델이 생략하기 쉬운 property 경로 접두사를 보정한다.
@@ -1146,6 +1202,56 @@ def apply_semantic_checks(data: dict) -> None:
         for item in field_analysis
         if isinstance(item, dict) and item.get("field")
     }
+
+    # A numeric zero is valid only when the source explicitly says zero/free/none.
+    for fixed_field in ("deposit", "key_money"):
+        if property_fields.get(fixed_field) != 0:
+            continue
+        meta = field_meta.get(f"property.{fixed_field}", {})
+        evidence_text = " ".join(
+            str(item.get("raw_text") or "")
+            for item in meta.get("evidence", [])
+            if isinstance(item, dict)
+        )
+        support_text = evidence_text or str(meta.get("raw_value") or "")
+        if support_text and not is_no_cost_statement(support_text):
+            property_fields[fixed_field] = None
+            meta["needs_review"] = True
+            meta["confidence"] = min(float(meta.get("confidence") or 0), 0.69)
+            field_path = f"property.{fixed_field}"
+            validation = details.setdefault("validation", {})
+            if field_path not in validation.setdefault("unknown_fields", []):
+                validation["unknown_fields"].append(field_path)
+            validation.setdefault("warnings", []).append(
+                f"명시적 0원 근거가 없어 0을 null로 변경했습니다: {field_path}"
+            )
+
+    deposit_meta = field_meta.get("property.deposit", {})
+    key_money_meta = field_meta.get("property.key_money", {})
+    deposit_evidence = deposit_meta.get("evidence", [])
+    key_money_evidence = key_money_meta.get("evidence", [])
+    if (
+        property_fields.get("deposit") == 0
+        and property_fields.get("key_money") == 0
+        and deposit_evidence
+        and deposit_evidence == key_money_evidence
+    ):
+        shared_text = " ".join(
+            str(item.get("raw_text") or "")
+            for item in key_money_evidence
+            if isinstance(item, dict)
+        )
+        if not re.search(r"礼金|레이킨|시키킨|敷金|보증금", shared_text):
+            property_fields["key_money"] = None
+            key_money_meta["needs_review"] = True
+            key_money_meta["confidence"] = min(
+                float(key_money_meta.get("confidence") or 0), 0.69
+            )
+            if "property.key_money" not in unknown_fields:
+                unknown_fields.append("property.key_money")
+            warnings.append(
+                "보증금과 레이킨에 동일한 무표지 근거가 사용되어 key_money를 null로 변경했습니다."
+            )
 
     # 모든 역을 보존하면서 최단 도보 역 하나를 DB 대표 역으로 선택한다.
     stations = [
@@ -1456,7 +1562,7 @@ def apply_semantic_checks(data: dict) -> None:
             "display_name": str(candidate.get("display_name") or raw_name),
             "amount": candidate_direct_amount(raw_text),
             "raw_value": raw_text,
-            "obligation_status": "UNKNOWN",
+            "obligation_status": infer_obligation_status(candidate_text),
             "timing": infer_cost_timing(candidate_text),
         }
         identity = (

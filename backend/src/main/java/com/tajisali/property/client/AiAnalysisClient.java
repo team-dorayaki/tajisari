@@ -50,7 +50,7 @@ public class AiAnalysisClient {
         }
 
         return execute(() -> restClient.post()
-                .uri("/api/v1/analysis/images")
+                .uri("/api/property-analyses/images")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(parts)
                 .retrieve()
@@ -59,7 +59,7 @@ public class AiAnalysisClient {
 
     public PropertyAnalysisResponse analyzeUrl(String url) {
         return execute(() -> restClient.post()
-                .uri("/api/v1/analysis/url")
+                .uri("/api/property-analyses/url")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(new UrlRequest(url))
                 .retrieve()

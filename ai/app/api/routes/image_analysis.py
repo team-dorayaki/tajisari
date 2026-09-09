@@ -10,7 +10,7 @@ from app.schemas.image import AnalysisResponse, UrlAnalysisRequest
 from app.services.gemini_analyzer import analyze_property_url, analyze_uploaded_images
 
 
-router = APIRouter(prefix="/analysis", tags=["analysis"])
+router = APIRouter(prefix="/property-analyses", tags=["analysis"])
 logger = logging.getLogger(__name__)
 ERROR_RESPONSES = {
     400: {"model": ErrorResponse, "description": "잘못된 입력"},
@@ -80,16 +80,8 @@ async def analyze_images_endpoint(
         result = await run_in_threadpool(
             analyze_uploaded_images, uploaded_images, None, selected_model
         )
-        cost_model = settings.cost_model or (
-            "gemini-3.5-flash" if settings.analysis_mode == "dual35" else "gemini-3.6-flash"
-        )
-        response_model = (
-            f"{settings.fixed_model}+{cost_model}"
-            if settings.analysis_mode != "single"
-            else selected_model
-        )
         return AnalysisResponse(
-            input_type="images", model=response_model, result=result
+            input_type="images", model=selected_model, result=result
         )
     except AppError:
         raise
@@ -109,15 +101,7 @@ async def analyze_url_endpoint(request: UrlAnalysisRequest) -> AnalysisResponse:
         result = await run_in_threadpool(
             analyze_property_url, str(request.url), None, selected_model
         )
-        cost_model = settings.cost_model or (
-            "gemini-3.5-flash" if settings.analysis_mode == "dual35" else "gemini-3.6-flash"
-        )
-        response_model = (
-            f"{settings.fixed_model}+{cost_model}"
-            if settings.analysis_mode != "single"
-            else selected_model
-        )
-        return AnalysisResponse(input_type="url", model=response_model, result=result)
+        return AnalysisResponse(input_type="url", model=selected_model, result=result)
     except AppError:
         raise
     except Exception as error:

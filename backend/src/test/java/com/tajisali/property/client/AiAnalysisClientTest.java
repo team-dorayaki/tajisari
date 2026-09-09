@@ -38,7 +38,7 @@ class AiAnalysisClientTest {
 
     @Test
     void 이미지는_AI_경로의_files_multipart로_전달된다() {
-        server.expect(once(), requestTo("http://ai.test/api/v1/analysis/images"))
+        server.expect(once(), requestTo("http://ai.test/api/property-analyses/images"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.MULTIPART_FORM_DATA))
                 .andExpect(content().string(containsString("name=\"files\"")))
@@ -54,7 +54,7 @@ class AiAnalysisClientTest {
 
     @Test
     void URL은_AI_경로의_JSON_body로_전달된다() {
-        server.expect(once(), requestTo("http://ai.test/api/v1/analysis/url"))
+        server.expect(once(), requestTo("http://ai.test/api/property-analyses/url"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(content().json("{\"url\":\"https://suumo.jp/chintai/example\"}"))
@@ -68,7 +68,7 @@ class AiAnalysisClientTest {
 
     @Test
     void JSON_v3를_camelCase_DTO로_읽고_원본과_null_0을_보존한다() {
-        server.expect(requestTo("http://ai.test/api/v1/analysis/url"))
+        server.expect(requestTo("http://ai.test/api/property-analyses/url"))
                 .andRespond(withSuccess(validResponse("url"), MediaType.APPLICATION_JSON));
 
         var response = client.analyzeUrl("https://suumo.jp/chintai/example");
@@ -95,7 +95,7 @@ class AiAnalysisClientTest {
 
     @Test
     void 대표적인_AI_실패는_공통_분석_실패로_변환된다() {
-        server.expect(requestTo("http://ai.test/api/v1/analysis/url"))
+        server.expect(requestTo("http://ai.test/api/property-analyses/url"))
                 .andRespond(withStatus(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS)
                         .body("{\"error\":{\"code\":\"GEMINI_RATE_LIMIT\",\"message\":\"internal\"}}")
                         .contentType(MediaType.APPLICATION_JSON));
@@ -109,7 +109,7 @@ class AiAnalysisClientTest {
 
     @Test
     void AI의_timeout_응답은_timeout_오류로_변환된다() {
-        server.expect(requestTo("http://ai.test/api/v1/analysis/url"))
+        server.expect(requestTo("http://ai.test/api/property-analyses/url"))
                 .andRespond(withStatus(org.springframework.http.HttpStatus.GATEWAY_TIMEOUT)
                         .body("{\"error\":{\"code\":\"GEMINI_TIMEOUT\"}}")
                         .contentType(MediaType.APPLICATION_JSON));
@@ -123,7 +123,7 @@ class AiAnalysisClientTest {
 
     @Test
     void 지원하지_않는_AI_스키마는_공통_분석_실패로_변환된다() {
-        server.expect(requestTo("http://ai.test/api/v1/analysis/url"))
+        server.expect(requestTo("http://ai.test/api/property-analyses/url"))
                 .andRespond(withSuccess(
                         validResponse("url").replace("\"3.0\"", "\"2.0\""),
                         MediaType.APPLICATION_JSON));
@@ -137,7 +137,7 @@ class AiAnalysisClientTest {
 
     @Test
     void AI_응답의_필수_구조가_없으면_공통_분석_실패로_변환된다() {
-        server.expect(requestTo("http://ai.test/api/v1/analysis/url"))
+        server.expect(requestTo("http://ai.test/api/property-analyses/url"))
                 .andRespond(withSuccess(
                         "{\"input_type\":\"url\",\"model\":\"gemini-3.5-flash-lite\",\"result\":{}}",
                         MediaType.APPLICATION_JSON));
@@ -151,7 +151,7 @@ class AiAnalysisClientTest {
 
     @Test
     void AI_서버_연결_실패는_공통_분석_실패로_변환된다() {
-        server.expect(requestTo("http://ai.test/api/v1/analysis/url"))
+        server.expect(requestTo("http://ai.test/api/property-analyses/url"))
                 .andRespond(request -> {
                     throw new ResourceAccessException("connection refused");
                 });
