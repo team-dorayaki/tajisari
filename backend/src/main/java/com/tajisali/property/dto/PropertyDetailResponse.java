@@ -60,14 +60,22 @@ public record PropertyDetailResponse(
             ExchangeRate exchangeRate,
             long availableFunds,
             long initialCost,
+            boolean canMoveIn,
             long balanceAfterMoveIn,
             long monthlyHousingCost,
             long monthlyLivingCost,
             long totalMonthlyCost,
+            List<MonthlyBalance> monthlyBalances,
             BigDecimal livingMonths,
+            boolean isUnlimited,
             int plannedStayMonths,
-            long balanceAfterPlannedStay,
-            long additionalFundsRequired) {
+            long requiredFunds,
+            long surplus,
+            long shortageJpy,
+            long shortageKrw) {
+    }
+
+    public record MonthlyBalance(int month, long balance) {
     }
 
     public record ExchangeRate(int jpy, int krw) {
