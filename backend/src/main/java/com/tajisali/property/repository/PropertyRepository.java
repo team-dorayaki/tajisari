@@ -14,4 +14,6 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
 
     @EntityGraph(attributePaths = "images")
     Optional<Property> findByIdAndUserId(Long propertyId, Long userId);
+
+    List<Property> findAllByUserId(Long userId);
 }
