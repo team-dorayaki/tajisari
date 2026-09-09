@@ -16,10 +16,11 @@ public class AiClientConfig {
     RestClient aiRestClient(
             @Value("${external.ai.base-url}") String baseUrl,
             @Value("${external.ai.connect-timeout:2s}") Duration connectTimeout,
-            @Value("${external.ai.read-timeout:15s}") Duration readTimeout
+            @Value("${external.ai.read-timeout:60s}") Duration readTimeout
     ) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(connectTimeout)
+                .version(HttpClient.Version.HTTP_1_1)
                 .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(readTimeout);
