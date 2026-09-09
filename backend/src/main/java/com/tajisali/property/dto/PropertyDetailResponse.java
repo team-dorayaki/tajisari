@@ -30,10 +30,7 @@ public record PropertyDetailResponse(
             Long managementFee) {
     }
 
-    public record PropertyImage(
-            Long imageId,
-            String imageUrl,
-            int order) {
+    public record PropertyImage(Long imageId, String imageUrl, int order) {
     }
 
     public record CostAnalysis(
@@ -72,29 +69,31 @@ public record PropertyDetailResponse(
             CostTiming timing) {
     }
 
-    public record ExcludedCost(
-            String label,
-            String category,
-            String reason) {
+    public record ExcludedCost(String label, String category, String reason) {
     }
 
     public record Simulation(
             ExchangeRate exchangeRate,
             long availableFunds,
             long initialCost,
+            boolean canMoveIn,
             long balanceAfterMoveIn,
             long monthlyHousingCost,
             long monthlyLivingCost,
             long totalMonthlyCost,
+            List<MonthlyBalance> monthlyBalances,
             BigDecimal livingMonths,
+            boolean isUnlimited,
             int plannedStayMonths,
-            long balanceAfterPlannedStay,
-            boolean canCoverPlannedStay,
-            long additionalFundsRequired,
-            long additionalFundsRequiredKrw) {
+            long requiredFunds,
+            long surplus,
+            long shortageJpy,
+            long shortageKrw) {
+    }
+
+    public record MonthlyBalance(int month, long balance) {
     }
 
     public record ExchangeRate(int jpy, int krw) {
     }
-
 }
