@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from "react"
-import { Check } from "lucide-react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { CalendarDays, Check } from "lucide-react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import { CurrencyField } from "@/features/settlement-plan/components/currency-field"
@@ -10,7 +11,7 @@ import {
   stayMonthOptions,
 } from "@/features/settlement-plan/settlement-plan-data"
 import { useSettlementPlanStore } from "@/features/settlement-plan/store/settlement-plan-store"
-import { updateSettlementPlan } from "@/features/settlement-plan/api/settlement-plan-api"
+import { createSettlementPlan, fetchSettlementPlan, updateSettlementPlan, costTypeMap, type SettlementPlanRequest } from "@/features/settlement-plan/api/settlement-plan-api"
 import { parseAmount } from "@/features/settlement-plan/utils/amount"
 import { cn } from "@/lib/utils"
 
@@ -58,6 +59,7 @@ function FormCard({ children, className }: { children: ReactNode; className?: st
 function MoveInDateStep() {
   const moveInDate = useSettlementPlanStore((state) => state.moveInDate)
   const setMoveInDate = useSettlementPlanStore((state) => state.setMoveInDate)
+  const inputRef = useRef<HTMLInputElement>(null)
   const display = getDateDisplay(moveInDate)
 
   return (
@@ -71,6 +73,7 @@ function MoveInDateStep() {
         <span className="block text-xs font-bold text-[var(--brand)]">입주 예정일</span>
         <span className="mt-3 flex items-end justify-between gap-3 border-b-2 border-[var(--brand)] pb-3">
           <input
+            ref={inputRef}
             type="date"
             value={moveInDate}
             onChange={(event) => setMoveInDate(event.target.value)}
@@ -80,6 +83,14 @@ function MoveInDateStep() {
           <span className="shrink-0 text-sm font-semibold text-[var(--text-secondary)]">
             {display.weekday}
           </span>
+          <button
+            type="button"
+            aria-label="입주 예정일 캘린더 열기"
+            onClick={() => inputRef.current?.showPicker()}
+            className="grid size-6 shrink-0 place-items-center rounded-full text-[var(--brand)] hover:bg-[var(--brand)]/10"
+          >
+            <CalendarDays aria-hidden="true" className="size-5" />
+          </button>
         </span>
       </label>
 
@@ -131,8 +142,9 @@ function StayDurationStep() {
           <input
             type="text"
             inputMode="numeric"
-            value={stayMonthsInput ?? String(stayMonths)}
-            onFocus={() => setStayMonthsInput(String(stayMonths))}
+            value={stayMonthsInput ?? (stayMonths ? String(stayMonths) : "")}
+            onFocus={() => setStayMonthsInput(stayMonths ? String(stayMonths) : "")}
+            placeholder="개월 수 입력"
             onChange={(event) => handleStayMonthsChange(event.target.value)}
             onBlur={commitStayMonths}
             onKeyDown={(event) => {
@@ -339,9 +351,10 @@ function MonthlyCostsStep() {
             <input
               type="text"
               inputMode="numeric"
-              value={costs[item.key].toLocaleString("ko-KR")}
+              value={costs[item.key] ? costs[item.key].toLocaleString("ko-KR") : ""}
               onChange={(event) => setMonthlyCost(item.key, parseAmount(event.target.value))}
-              className="w-28 border-b border-[#d9dfe3] bg-transparent pb-2 text-right text-sm font-semibold tabular-nums outline-none focus:border-[var(--brand)]"
+              placeholder="금액 입력"
+              className="w-28 border-b border-[#d9dfe3] bg-transparent pb-2 text-right text-sm font-semibold tabular-nums outline-none placeholder:font-normal placeholder:text-[#b7bdc4] focus:border-[var(--brand)]"
               aria-label={`${item.label} 월 금액`}
             />
             <span className="text-xs font-semibold text-[var(--text-secondary)]">JPY</span>
@@ -480,13 +493,22 @@ function SettlementPlanPage() {
   const [searchParams] = useSearchParams()
   const isEditMode = searchParams.get("edit") === "1"
   const currentStep = getCurrentStep(step)
+  const queryClient = useQueryClient()
   const moveInDate = useSettlementPlanStore((state) => state.moveInDate)
   const stayMonths = useSettlementPlanStore((state) => state.stayMonths)
   const availableKrw = useSettlementPlanStore((state) => state.availableKrw)
   const availableJpy = useSettlementPlanStore((state) => state.availableJpy)
   const emergencyKrw = useSettlementPlanStore((state) => state.emergencyKrw)
   const emergencyJpy = useSettlementPlanStore((state) => state.emergencyJpy)
+  const additionalCosts = useSettlementPlanStore((state) => state.additionalCosts)
   const monthlyCosts = useSettlementPlanStore((state) => state.monthlyCosts)
+  const monthlyInputMode = useSettlementPlanStore((state) => state.monthlyInputMode)
+  const hydrate = useSettlementPlanStore((state) => state.hydrate)
+
+  const { data: fetchedPlan } = useQuery({
+    queryKey: ["settlement-plan"], queryFn: () => fetchSettlementPlan(), enabled: isEditMode, staleTime: 30_000,
+  })
+  useEffect(() => { if (fetchedPlan) hydrate(fetchedPlan) }, [fetchedPlan, hydrate])
 
   const screens: Record<number, ReactNode> = {
     1: <MoveInDateStep />,
@@ -521,18 +543,24 @@ function SettlementPlanPage() {
 
   const handleNext = async () => {
     if (currentStep === TOTAL_STEPS) {
+      const payload: SettlementPlanRequest = {
+        moveInDate, plannedStayMonths: stayMonths,
+        preparedFunds: { krw: availableKrw, jpy: availableJpy },
+        emergencyReserve: { krw: emergencyKrw, jpy: emergencyJpy },
+        additionalInitialCosts: additionalCostItems.filter((item) => additionalCosts[item.key].selected).map((item) => ({ type: costTypeMap[item.key], amount: additionalCosts[item.key].amount, currency: "JPY" })),
+        monthlyLivingCosts: monthlyCostItems.map((item) => ({ type: costTypeMap[item.key], amount: monthlyCosts[item.key], currency: "JPY" })),
+        monthlyLivingCostInputMethod: monthlyInputMode === "default" ? "DEFAULT" : "DIRECT",
+      }
       if (isEditMode) {
-        await updateSettlementPlan({
-          moveInDate,
-          stayMonths,
-          availableKrw,
-          availableJpy,
-          emergencyKrw,
-          emergencyJpy,
-          monthlyJpy: Object.values(monthlyCosts).reduce((sum, amount) => sum + amount, 0),
-        })
+        const planId = window.localStorage.getItem("tajisari.settlementPlanId")
+        if (!planId) throw new Error("저장된 정착 계획이 없습니다.")
+        await updateSettlementPlan(planId, payload)
+        await queryClient.invalidateQueries({ queryKey: ["settlement-plan"] })
         void navigate("/my")
       } else {
+        await createSettlementPlan(payload)
+        await queryClient.invalidateQueries({ queryKey: ["settlement-plan"] })
+        await queryClient.invalidateQueries({ queryKey: ["home-progress"] })
         void navigate("/home?stage=2")
       }
       return

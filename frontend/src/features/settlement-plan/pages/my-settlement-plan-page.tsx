@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { type ReactNode } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { ArrowLeft, ChevronRight, LoaderCircle } from "lucide-react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
@@ -58,22 +59,11 @@ function MySettlementPlanPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const showBackButton = searchParams.get("from") === "home"
-  const [plan, setPlan] = useState<SettlementPlan | null>(null)
-  const [error, setError] = useState(false)
-
-  useEffect(() => {
-    let active = true
-    void fetchSettlementPlan()
-      .then((result) => {
-        if (active) setPlan(result)
-      })
-      .catch(() => {
-        if (active) setError(true)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
+  const { data: plan, isError: error } = useQuery<SettlementPlan>({
+    queryKey: ["settlement-plan"],
+    queryFn: () => fetchSettlementPlan(),
+    staleTime: 30_000,
+  })
 
   return (
     <main className="min-h-dvh bg-[#f5f6f7] pb-[calc(120px+env(safe-area-inset-bottom))]">
@@ -110,13 +100,13 @@ function MySettlementPlanPage() {
             </PlanCard>
             <PlanCard title="월 생활비" step={6}>
               <PlanRow label="월 합계" value={formatJpy(plan.monthlyJpy)} />
-              <PlanRow label="입력 방식" value="기본값 적용 · 아직 확인 전" accent />
+              <PlanRow label="입력 방식" value={plan.monthlyInputMode === "default" ? "기본값 적용" : "직접 입력"} accent={plan.monthlyInputMode === "default"} />
             </PlanCard>
             <section className="rounded-[20px] bg-white px-5 py-5">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-[18px] font-bold tracking-[-0.03em]">적용 환율</h2>
                 <Link to="/plan/exchange-rate" className="flex min-h-8 items-center gap-0.5 text-sm font-bold text-[var(--brand)]">
-                  수정 <ChevronRight aria-hidden="true" className="size-4" strokeWidth={2.5} />
+                  보기 <ChevronRight aria-hidden="true" className="size-4" strokeWidth={2.5} />
                 </Link>
               </div>
               <dl className="space-y-3.5">

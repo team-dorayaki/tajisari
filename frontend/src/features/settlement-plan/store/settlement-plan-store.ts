@@ -21,6 +21,7 @@ type SettlementPlanState = {
   setMonthlyCost: (key: MonthlyCostKey, amount: number) => void
   applyMonthlyDefaults: () => void
   setMonthlyInputMode: (monthlyInputMode: "direct" | "default") => void
+  hydrate: (data: { moveInDate: string; stayMonths: number; availableKrw: number; availableJpy: number; emergencyKrw: number; emergencyJpy: number; additionalInitialCosts?: Array<{ type: string; amount: number; currency: "KRW" | "JPY" }>; monthlyLivingCosts?: Array<{ type: string; amount: number; currency: "KRW" | "JPY" }>; monthlyInputMode: "direct" | "default" }) => void
 }
 
 type AdditionalCostKey = "flight" | "moving" | "furniture" | "visa" | "other"
@@ -47,21 +48,27 @@ const defaultMonthlyCosts: Record<MonthlyCostKey, number> = {
   other: 20_000,
 }
 
+function getDefaultMoveInDate() {
+  const date = new Date()
+  date.setMonth(date.getMonth() + 1)
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(date)
+}
+
 const useSettlementPlanStore = create<SettlementPlanState>((set) => ({
-  moveInDate: "2026-10-15",
-  stayMonths: 12,
-  availableKrw: 8_000_000,
-  availableJpy: 100_000,
-  emergencyKrw: 1_000_000,
+  moveInDate: getDefaultMoveInDate(),
+  stayMonths: 0,
+  availableKrw: 0,
+  availableJpy: 0,
+  emergencyKrw: 0,
   emergencyJpy: 0,
   additionalCosts: {
-    flight: { selected: true, amount: 40_000 },
-    moving: { selected: true, amount: 10_000 },
-    furniture: { selected: true, amount: 12_000 },
+    flight: { selected: false, amount: 0 },
+    moving: { selected: false, amount: 0 },
+    furniture: { selected: false, amount: 0 },
     visa: { selected: false, amount: 0 },
     other: { selected: false, amount: 0 },
   },
-  monthlyCosts: defaultMonthlyCosts,
+  monthlyCosts: { food: 0, transportation: 0, utilities: 0, communication: 0, insurance: 0, other: 0 },
   monthlyInputMode: "direct",
   setMoveInDate: (moveInDate) => set({ moveInDate }),
   setStayMonths: (stayMonths) => set({ stayMonths }),
@@ -94,6 +101,15 @@ const useSettlementPlanStore = create<SettlementPlanState>((set) => ({
   applyMonthlyDefaults: () =>
     set({ monthlyCosts: { ...defaultMonthlyCosts }, monthlyInputMode: "default" }),
   setMonthlyInputMode: (monthlyInputMode) => set({ monthlyInputMode }),
+  hydrate: (data) => set((state) => {
+    const additionalCosts = { ...state.additionalCosts }
+    const additionalTypeToKey: Record<string, AdditionalCostKey> = { AIRFARE: "flight", MOVING: "moving", FURNITURE_APPLIANCE: "furniture", VISA_ADMINISTRATION: "visa", OTHER: "other" }
+    for (const item of data.additionalInitialCosts ?? []) { const key = additionalTypeToKey[item.type]; if (key) additionalCosts[key] = { selected: true, amount: item.amount } }
+    const monthlyCosts = { ...state.monthlyCosts }
+    const monthlyTypeToKey: Record<string, MonthlyCostKey> = { FOOD: "food", TRANSPORTATION: "transportation", UTILITIES: "utilities", COMMUNICATION: "communication", INSURANCE_TAX: "insurance", OTHER: "other" }
+    for (const item of data.monthlyLivingCosts ?? []) { const key = monthlyTypeToKey[item.type]; if (key) monthlyCosts[key] = item.amount }
+    return { moveInDate: data.moveInDate, stayMonths: data.stayMonths, availableKrw: data.availableKrw, availableJpy: data.availableJpy, emergencyKrw: data.emergencyKrw, emergencyJpy: data.emergencyJpy, additionalCosts, monthlyCosts, monthlyInputMode: data.monthlyInputMode }
+  }),
 }))
 
 export { useSettlementPlanStore }

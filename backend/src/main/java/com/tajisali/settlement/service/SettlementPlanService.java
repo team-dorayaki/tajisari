@@ -5,6 +5,8 @@ import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.settlement.domain.*;
 import com.tajisali.settlement.dto.*;
 import com.tajisali.settlement.repository.SettlementPlanRepository;
+import com.tajisali.user.domain.User;
+import com.tajisali.user.service.AnonymousUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,9 +25,10 @@ public class SettlementPlanService {
     private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
 
     private final SettlementPlanRepository settlementPlanRepository;
+    private final AnonymousUserService anonymousUserService;
 
     @Transactional
-    public SettlementPlanCreateResponse create(SettlementPlanCreateRequest request) {
+    public SettlementPlanCreateResult create(SettlementPlanCreateRequest request, String userKey) {
         // 비즈니스 규칙 검증
         validateRequest(request);
 
@@ -33,26 +36,35 @@ public class SettlementPlanService {
         CurrencyTotalsResponse additionalInitialCostTotals = calculateTotals(request.getAdditionalInitialCosts());
         CurrencyTotalsResponse monthlyLivingCostTotals = calculateTotals(request.getMonthlyLivingCosts());
 
+        User user = anonymousUserService.resolveOrCreate(userKey);
+        if (settlementPlanRepository.existsByUserId(user.getId())) {
+            throw new BusinessException(ErrorCode.SETTLEMENT_PLAN_ALREADY_EXISTS);
+        }
+
         // 정착 계획과 비용 항목 생성
-        SettlementPlan settlementPlan = createSettlementPlan(request);
+        SettlementPlan settlementPlan = createSettlementPlan(user, request);
         addCostItems(settlementPlan, request.getAdditionalInitialCosts(), CostCategory.INITIAL);
         addCostItems(settlementPlan, request.getMonthlyLivingCosts(), CostCategory.MONTHLY);
 
         SettlementPlan savedPlan = settlementPlanRepository.save(settlementPlan);
-        return new SettlementPlanCreateResponse(
+        SettlementPlanCreateResponse response = new SettlementPlanCreateResponse(
                 savedPlan.getId(), additionalInitialCostTotals, monthlyLivingCostTotals, "SAVED");
+        return new SettlementPlanCreateResult(response, user.getUserKey());
     }
 
-    // 저장된 계획과 통화별 비용 합계 조회
     @Transactional(readOnly = true)
-    public SettlementPlanResponse get(Long planId) {
-        return toResponse(findPlan(planId));
+    public SettlementPlanResponse getCurrent(String userKey) {
+        return toResponse(findCurrentPlan(userKey));
     }
 
-    // 기존 계획의 입력값 전체 수정
     @Transactional
-    public SettlementPlanResponse update(Long planId, SettlementPlanCreateRequest request) {
-        SettlementPlan settlementPlan = findPlan(planId);
+    public SettlementPlanResponse updateCurrent(String userKey, SettlementPlanCreateRequest request) {
+        return updatePlan(findCurrentPlan(userKey), request);
+    }
+
+    private SettlementPlanResponse updatePlan(
+            SettlementPlan settlementPlan,
+            SettlementPlanCreateRequest request) {
         validateRequest(request);
         // 변경 전에 합계 범위까지 검증
         calculateTotals(request.getAdditionalInitialCosts());
@@ -76,8 +88,10 @@ public class SettlementPlanService {
         return toResponse(settlementPlan);
     }
 
-    private SettlementPlan findPlan(Long planId) {
-        return settlementPlanRepository.findById(planId)
+    private SettlementPlan findCurrentPlan(String userKey) {
+        User user = anonymousUserService.findExisting(userKey)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_PLAN_NOT_FOUND));
+        return settlementPlanRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SETTLEMENT_PLAN_NOT_FOUND));
     }
 
@@ -192,8 +206,9 @@ public class SettlementPlanService {
         }
     }
 
-    private SettlementPlan createSettlementPlan(SettlementPlanCreateRequest request) {
+    private SettlementPlan createSettlementPlan(User user, SettlementPlanCreateRequest request) {
         return new SettlementPlan(
+                user,
                 request.getMoveInDate(),
                 request.getPlannedStayMonths(),
                 request.getPreparedFunds().getKrw(),
