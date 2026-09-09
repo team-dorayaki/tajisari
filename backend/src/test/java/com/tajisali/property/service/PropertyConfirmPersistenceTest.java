@@ -96,6 +96,8 @@ class PropertyConfirmPersistenceTest {
         assertThat(property.getListedInitialCostTotal()).isEqualTo(999_999L);
         assertThat(analysis.getSourceType()).isEqualTo("URL");
         assertThat(analysis.getModelVersion()).isEqualTo("gemini-3.5-flash-lite");
-        assertThat(analysis.getRawJson()).isEqualTo(rawResult.toString());
+        var savedRawResult = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(analysis.getRawJson());
+        assertThat(savedRawResult).isEqualTo(rawResult);
     }
 }
