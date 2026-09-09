@@ -18,6 +18,7 @@ public enum ErrorCode {
     SETTLEMENT_PLAN_COST_TOTAL_OVERFLOW(HttpStatus.BAD_REQUEST, "비용 합계가 지원하는 금액 범위를 초과했습니다."),
 
     PROPERTY_NOT_FOUND(HttpStatus.NOT_FOUND, "저장된 매물을 찾을 수 없습니다."),
+    PROPERTY_COST_TOTAL_OVERFLOW(HttpStatus.BAD_REQUEST, "매물 비용 합계가 지원하는 금액 범위를 초과했습니다."),
     EXCHANGE_RATE_AMOUNT_OVERFLOW(HttpStatus.BAD_REQUEST, "환산 결과가 지원하는 금액 범위를 초과했습니다."),
     COMMON_INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
 
