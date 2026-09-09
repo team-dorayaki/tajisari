@@ -1,15 +1,36 @@
 import { Link } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 
 import avatarUrl from "@/assets/default_avatar.png"
+import { fetchSettlementPlan, type SettlementPlan } from "@/features/settlement-plan/api/settlement-plan-api"
 
-const profileValues = [
-  { label: "입주 예정", value: "D-42" },
-  { label: "체류 기간", value: "12개월" },
-  { label: "준비자금", value: "800만원" },
-  { label: "월 생활비", value: "¥115,000", accent: true },
-]
+function daysUntil(moveInDate: string) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const target = new Date(`${moveInDate}T00:00:00`)
+  return Math.max(0, Math.ceil((target.getTime() - today.getTime()) / 86_400_000))
+}
+
+function formatPreparedFunds(value: number) {
+  return value % 10_000 === 0 ? `${(value / 10_000).toLocaleString("ko-KR")}만원` : `₩${value.toLocaleString("ko-KR")}`
+}
 
 function SettlementProfileCard() {
+  const { data: plan } = useQuery<SettlementPlan>({
+    queryKey: ["settlement-plan"],
+    queryFn: fetchSettlementPlan,
+    staleTime: 30_000,
+  })
+
+  if (!plan) return null
+
+  const profileValues = [
+    { label: "입주 예정", value: `D-${daysUntil(plan.moveInDate)}` },
+    { label: "체류 기간", value: `${plan.stayMonths}개월` },
+    { label: "준비자금", value: formatPreparedFunds(plan.availableKrw) },
+    { label: "월 생활비", value: `¥${plan.monthlyJpy.toLocaleString("ko-KR")}`, accent: true },
+  ]
+
   return (
     <section className="rounded-[20px] bg-white p-5" aria-labelledby="settlement-profile-title">
       <div className="flex items-center gap-4 border-b border-[#edf0f2] pb-4">
