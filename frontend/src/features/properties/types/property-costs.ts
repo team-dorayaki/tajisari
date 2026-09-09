@@ -5,7 +5,7 @@ type CostConfirmationType = "AMOUNT" | "OCCURRENCE_TIMING" | "REQUIREDNESS" | "B
 type CostConfirmationStatus = "PENDING" | "RESOLVED"
 
 type PropertyCostReviewProperty = {
-  propertyId: string
+  propertyId: string | null
   sourceSite: SourceSite | null
   sourceUrl: string | null
   name: string
@@ -23,7 +23,7 @@ type PropertyCostReviewProperty = {
 
 type PropertyCostItem = {
   costItemId: string
-  propertyId: string
+  propertyId: string | null
   rawName: string
   displayName: string
   amount: number | null

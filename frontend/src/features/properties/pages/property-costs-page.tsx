@@ -448,6 +448,7 @@ function SelectionCostsSheet({ items, initialSelectedIds, onApply, onClose }: { 
 
 function formatCostItemValue(item: CostItem) {
   if (item.amount === null) return item.monthly ? `${item.emptyLabel ?? "-"} /월` : item.emptyLabel ?? "-"
+  if (item.amount === 0 && item.emptyLabel) return item.monthly ? `${item.emptyLabel} /월` : item.emptyLabel
   return `¥${item.amount.toLocaleString("en-US")}${item.monthly ? " /월" : ""}`
 }
 

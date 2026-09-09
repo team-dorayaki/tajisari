@@ -1,7 +1,7 @@
 import type { PropertyCostReviewResponse } from "@/features/properties/types/property-costs"
 
 type SavePropertyRequest = {
-  sourceType: "IMAGE" | "URL" | "BOTH"
+  sourceType: "IMAGE" | "URL"
   modelVersion: string
   property: {
     sourceSite: string
@@ -25,7 +25,7 @@ type SavePropertyRequest = {
 }
 
 type SavePropertyResponse = {
-  propertyId: string
+  propertyId: number
 }
 
 type MockFailureStage = "review" | "save" | "analysis"
@@ -93,18 +93,42 @@ async function fetchPropertyCosts(): Promise<PropertyCostReviewResponse> {
   return structuredClone(mockPropertyCosts)
 }
 
-async function saveProperty(payload: SavePropertyRequest): Promise<SavePropertyResponse> {
+async function parseSavePropertyResponse(response: Response): Promise<SavePropertyResponse> {
+  const body = await response.json().catch(() => null) as { success: boolean; data: { propertyId?: number } | null; error?: { message?: string } | null } | null
+  const propertyId = body?.data?.propertyId
+  if (!response.ok || !body?.success || body.data === null || !Number.isSafeInteger(propertyId) || propertyId === undefined || propertyId <= 0) {
+    throw new Error(body?.error?.message ?? "매물 저장에 실패했어요. 다시 시도해주세요.")
+  }
+  return { propertyId }
+}
+
+async function confirmUrlProperty(payload: SavePropertyRequest): Promise<SavePropertyResponse> {
   const response = await fetch("/api/properties/confirm", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   })
-  const body = await response.json().catch(() => null) as { success: boolean; data: { propertyId: number } | null; error?: { message?: string } | null } | null
-  if (!response.ok || !body?.success || body.data === null) {
-    throw new Error(body?.error?.message ?? "매물 저장에 실패했어요. 다시 시도해주세요.")
-  }
-  return { propertyId: String(body.data.propertyId) }
+  return parseSavePropertyResponse(response)
+}
+
+async function confirmImageProperty(payload: SavePropertyRequest, files: File[]): Promise<SavePropertyResponse> {
+  const formData = new FormData()
+  formData.append("request", new Blob([JSON.stringify(payload)], { type: "application/json" }))
+  files.forEach((file) => formData.append("files", file))
+
+  const response = await fetch("/api/properties/confirm/images", {
+    method: "POST",
+    credentials: "same-origin",
+    body: formData,
+  })
+  return parseSavePropertyResponse(response)
+}
+
+async function saveProperty(payload: SavePropertyRequest, files: File[] = []): Promise<SavePropertyResponse> {
+  return payload.sourceType === "IMAGE"
+    ? confirmImageProperty(payload, files)
+    : confirmUrlProperty(payload)
 }
 
 async function analyzePropertyCosts(propertyId: string): Promise<void> {

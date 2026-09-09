@@ -67,6 +67,7 @@ type PropertyCostsState = {
   reviewError: string | null
   savedPropertyId: string | null
   analysisResult: PropertyAnalysisResult | null
+  analysisFiles: File[]
   submissionError: SubmissionError | null
   updatePropertyInfo: (propertyInfo: PropertyInfo) => void
   updateCostAmounts: (values: Record<string, string>) => void
@@ -75,7 +76,7 @@ type PropertyCostsState = {
   saveReviewDraft: () => void
   discardReviewDraft: () => void
   clearSubmissionError: () => void
-  loadAnalysisResult: (result: PropertyAnalysisResult) => void
+  loadAnalysisResult: (result: PropertyAnalysisResult, files: File[]) => void
   loadPropertyCosts: () => Promise<void>
   submitPropertyAndAnalyze: () => Promise<string>
 }
@@ -118,7 +119,7 @@ function toCostSections(response: PropertyCostReviewResponse, confirmations: Req
     { id: "rent", label: "월세(家賃)", amount: property.rent, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
     { id: "management", label: "관리비·공익비", amount: property.managementFee, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
     { id: "deposit", label: "시키킨(敷金)", amount: property.deposit, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, verifications: [] },
-    { id: "key-money", label: "레이킨(礼金)", amount: property.keyMoney === 0 ? null : property.keyMoney, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, emptyLabel: property.keyMoney === 0 ? "없음" : undefined, verifications: [] },
+    { id: "key-money", label: "레이킨(礼金)", amount: property.keyMoney, currency: "JPY", calculationPeriod: "INITIAL", originalText: null, emptyLabel: property.keyMoney === 0 ? "없음" : undefined, verifications: [] },
   ]
   const displayItems = costItems.map((item, index) => toDisplayCostItem(item, index, confirmations))
 
@@ -130,7 +131,7 @@ function toCostSections(response: PropertyCostReviewResponse, confirmations: Req
   ]
 }
 
-function toRequiredConfirmations(result: PropertyAnalysisResult, propertyId: string): RequiredCostConfirmation[] {
+function toRequiredConfirmations(result: PropertyAnalysisResult): RequiredCostConfirmation[] {
   return result.analysisDetails.costItemAnalysis
     .filter((analysis) => analysis.needsReview && result.propertyCostItems[analysis.costItemIndex] !== undefined)
     .map((analysis) => {
@@ -144,7 +145,7 @@ function toRequiredConfirmations(result: PropertyAnalysisResult, propertyId: str
             : "BROKER_CONFIRMATION"
       return {
         confirmationId: `analysis-review-${analysis.costItemIndex}`,
-        costItemId: `${propertyId}-${analysis.costItemIndex}`,
+        costItemId: `analysis-cost-${analysis.costItemIndex}`,
         type,
         status: "PENDING",
         answer: null,
@@ -170,6 +171,7 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
   reviewError: null,
   savedPropertyId: null,
   analysisResult: null,
+  analysisFiles: [],
   submissionError: null,
   updatePropertyInfo: (propertyInfo) =>
     set({
@@ -226,14 +228,13 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
     })),
   discardReviewDraft: () => set({ draftVerificationAnswers: {}, draftSelectedCostIds: null }),
   clearSubmissionError: () => set({ submissionError: null }),
-  loadAnalysisResult: (result) => {
+  loadAnalysisResult: (result, files) => {
     const { property, propertyCostItems } = result
-    const propertyId = globalThis.crypto.randomUUID()
     const now = new Date().toISOString()
-    const requiredConfirmations = toRequiredConfirmations(result, propertyId)
+    const requiredConfirmations = toRequiredConfirmations(result)
     const review: PropertyCostReviewResponse = {
       property: {
-        propertyId,
+        propertyId: null,
         sourceSite: property.sourceSite as PropertyCostReviewResponse["property"]["sourceSite"],
         sourceUrl: property.sourceUrl,
         name: property.propertyName?.trim() || "이름 없는 매물",
@@ -249,8 +250,8 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
         updatedAt: now,
       },
       costItems: propertyCostItems.map((item, index) => ({
-        costItemId: `${propertyId}-${index}`,
-        propertyId,
+        costItemId: `analysis-cost-${index}`,
+        propertyId: null,
         ...item,
         createdAt: now,
         updatedAt: now,
@@ -268,6 +269,7 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
       requiredConfirmations,
       savedPropertyId: null,
       analysisResult: result,
+      analysisFiles: files,
       reviewStatus: "success",
       reviewError: null,
       submissionStatus: "idle",
@@ -279,23 +281,38 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
     let propertyId = get().savedPropertyId
     if (!propertyId) {
       set({ submissionStatus: "saving", submissionError: null })
-      const { analysisResult, propertyInfo, costSections } = get()
+      const { analysisResult, analysisFiles, propertyInfo, costSections } = get()
 
       try {
         if (!analysisResult) {
           throw new Error("분석 결과를 찾을 수 없어요. 다시 분석해주세요.")
         }
+        const sourceType = analysisResult.inputType === "images" ? "IMAGE" : "URL"
+        if (sourceType === "IMAGE" && (analysisFiles.length < 1 || analysisFiles.length > 3)) {
+          throw new Error("분석에 사용한 이미지를 찾을 수 없어요. 다시 분석해주세요.")
+        }
+        const baseItems = new Map(costSections
+          .find((section) => section.id === "base")
+          ?.items.map((item) => [item.id, item]) ?? [])
+        const editedBaseAmount = (id: string, originalAmount: number | null) => {
+          const edited = baseItems.get(id)
+          return edited ? edited.amount : originalAmount
+        }
         const editedItems = new Map(costSections.flatMap((section) => section.items)
           .filter((item): item is CostItem & { sourceIndex: number } => item.sourceIndex !== undefined)
           .map((item) => [item.sourceIndex, item]))
         const response = await saveProperty({
-          sourceType: analysisResult.analysisMetadata.sourceType,
+          sourceType,
           modelVersion: analysisResult.modelVersion,
           property: {
             ...analysisResult.property,
             sourceSite: analysisResult.property.sourceSite ?? "UNKNOWN",
-            sourceUrl: analysisResult.property.sourceUrl,
+            sourceUrl: sourceType === "IMAGE" ? null : analysisResult.property.sourceUrl,
             propertyName: propertyInfo.name,
+            rent: editedBaseAmount("rent", analysisResult.property.rent),
+            managementFee: editedBaseAmount("management", analysisResult.property.managementFee),
+            deposit: editedBaseAmount("deposit", analysisResult.property.deposit),
+            keyMoney: editedBaseAmount("key-money", analysisResult.property.keyMoney),
             availableFrom: propertyInfo.moveInDate || null,
             contractPeriodMonths: propertyInfo.contractMonths ? Number(propertyInfo.contractMonths) : null,
           },
@@ -322,16 +339,20 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
                     : item.timing
             return {
               ...item,
-              amount: edited?.amount ?? item.amount,
+              amount: edited ? edited.amount : item.amount,
               obligationStatus,
               timing,
               includedInCalculation: obligationStatus === "REQUIRED" || (obligationStatus === "OPTIONAL" && (edited?.selected ?? false)),
             }
           }),
           rawResult: analysisResult.rawResult,
+        }, analysisFiles)
+        propertyId = String(response.propertyId)
+        set({
+          savedPropertyId: propertyId,
+          analysisResult: null,
+          analysisFiles: [],
         })
-        propertyId = response.propertyId
-        set({ savedPropertyId: propertyId })
       } catch (error) {
         set((state) => ({
           submissionStatus: "saveError",

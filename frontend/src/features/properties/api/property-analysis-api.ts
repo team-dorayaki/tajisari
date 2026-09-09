@@ -7,21 +7,88 @@ type AnalysisCostItem = {
   timing: "INITIAL" | "MONTHLY" | "RENEWAL" | "MOVE_OUT" | "CONDITIONAL" | "UNKNOWN"
 }
 
+type AnalysisSourceType = "IMAGE" | "URL" | "BOTH"
+type AnalysisSourceSite = "SUUMO" | "LIFULL_HOMES" | "ATHOME" | "LEOPALACE21" | "GTN_BEST_ESTATE" | "SOL_HOUSING" | "JAPAN_HOMES" | "UR" | "OTHER" | "UNKNOWN"
+type Evidence = {
+  sourceType: "IMAGE" | "URL" | "POLICY"
+  sourceIndex: number | null
+  sourceUrl: string | null
+  rawText: string | null
+}
+
 type PropertyAnalysisResult = {
   inputType: "images" | "url"
   modelVersion: string
   rawResult: unknown
   analysisMetadata: {
-    sourceType: "IMAGE" | "URL" | "BOTH"
+    schemaVersion: string
+    sourceType: AnalysisSourceType
+    imageCount: number
   }
   analysisDetails: {
+    fieldAnalysis: Array<{
+      field: string
+      rawValue: string | null
+      confidence: number | null
+      needsReview: boolean
+      evidence: Evidence[]
+    }>
     costItemAnalysis: Array<{
       costItemIndex: number
+      scope: "LISTING_SPECIFIC"
+      confidence: number | null
       needsReview: boolean
+      evidence: Evidence[]
     }>
+    allStations: Array<{
+      lineName: string | null
+      stationName: string | null
+      walkMinutes: number | null
+      evidence: Evidence[]
+    }>
+    additionalFields: Array<{
+      category: "PROPERTY" | "BUILDING" | "LOCATION" | "ACCESS" | "CONTRACT" | "CONDITION" | "FACILITY" | "AGENCY" | "LISTING" | "OTHER"
+      rawName: string | null
+      displayName: string | null
+      value: string | null
+      unit: string | null
+      rawValue: string | null
+      confidence: number | null
+      needsReview: boolean
+      evidence: Evidence[]
+    }>
+    referenceInformation: Array<{
+      category: "COMPANY_POLICY" | "SITE_GUIDE"
+      rawText: string | null
+      appliesToListing: "YES" | "NO" | "UNKNOWN"
+      evidence: Evidence[]
+    }>
+    validation: {
+      conflicts: Array<{
+        field: string
+        values: string[]
+        reason: string | null
+        resolution: "RESOLVED" | "UNKNOWN"
+        resolvedValue: string | null
+        evidence: Evidence[]
+      }>
+      warnings: string[]
+      unknownFields: string[]
+      checks: {
+        evidenceOnly: boolean
+        amountDoesNotImplyRequired: boolean
+        zeroAndNullDistinguished: boolean
+        duplicatesRemoved: boolean
+        conflictsReviewed: boolean
+        fixedCostsNotDuplicated: boolean
+        listingTermsPreferred: boolean
+        amountsMatchRawText: boolean
+        requiredStatusHasEvidence: boolean
+      }
+    }
   }
   property: {
-    sourceSite: string | null
+    sourceSite: AnalysisSourceSite | null
     sourceUrl: string | null
     propertyName: string | null
     prefecture: string | null
@@ -68,4 +135,4 @@ async function analyzePropertyUrl(url: string) {
 }
 
 export { analyzePropertyImages, analyzePropertyUrl }
-export type { AnalysisCostItem, PropertyAnalysisResult }
+export type { AnalysisCostItem, AnalysisSourceSite, AnalysisSourceType, PropertyAnalysisResult }
