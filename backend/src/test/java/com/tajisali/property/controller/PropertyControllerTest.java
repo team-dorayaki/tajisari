@@ -2,16 +2,19 @@ package com.tajisali.property.controller;
 
 import com.tajisali.common.config.JacksonConfig;
 import com.tajisali.common.exception.GlobalExceptionHandler;
+import com.tajisali.property.dto.PropertyConfirmResponse;
 import com.tajisali.property.dto.PropertyListResponse;
 import com.tajisali.property.dto.PropertyDetailResponse;
 import com.tajisali.property.dto.PropertyPriorityUpdateRequest;
 import com.tajisali.property.dto.PropertyPriorityUpdateResponse;
 import com.tajisali.property.service.PropertyCommandService;
+import com.tajisali.property.service.PropertyConfirmResult;
 import com.tajisali.property.service.PropertyQueryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -20,10 +23,15 @@ import java.math.BigDecimal;
 import jakarta.servlet.http.Cookie;
 
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -41,6 +49,57 @@ class PropertyControllerTest {
 
     @MockitoBean
     private PropertyCommandService propertyCommandService;
+
+    @Test
+    void URL_매물_확인_결과를_저장하고_propertyId를_반환한다() throws Exception {
+        when(propertyCommandService.confirmUrl(any(), eq(USER_KEY)))
+                .thenReturn(new PropertyConfirmResult(
+                        new PropertyConfirmResponse(15L), USER_KEY));
+
+        mockMvc.perform(post("/api/properties/confirm")
+                        .cookie(new Cookie("tajisari_anonymous_user", USER_KEY))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(confirmRequest("https://suumo.jp/chintai/example", "URL")))
+                .andExpect(status().isCreated())
+                .andExpect(header().doesNotExist("Set-Cookie"))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.propertyId").value(15))
+                .andExpect(jsonPath("$.error").value((Object) null));
+
+        verify(propertyCommandService).confirmUrl(any(), eq(USER_KEY));
+    }
+
+    @Test
+    void 익명_사용자_쿠키가_없으면_저장_후_쿠키를_설정한다() throws Exception {
+        String createdUserKey = "00000000-0000-0000-0000-000000000002";
+        when(propertyCommandService.confirmUrl(any(), org.mockito.ArgumentMatchers.isNull()))
+                .thenReturn(new PropertyConfirmResult(
+                        new PropertyConfirmResponse(15L), createdUserKey));
+
+        mockMvc.perform(post("/api/properties/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(confirmRequest("https://suumo.jp/chintai/example", "URL")))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString(
+                        "tajisari_anonymous_user=" + createdUserKey)));
+    }
+
+    @Test
+    void 필수_요청값이_없거나_URL_분석이_아니면_저장_Service를_호출하지_않는다() throws Exception {
+        mockMvc.perform(post("/api/properties/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        mockMvc.perform(post("/api/properties/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(confirmRequest("https://suumo.jp/chintai/example", "IMAGE")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        verifyNoInteractions(propertyCommandService);
+    }
 
     @Test
     void 매물_목록과_화면용_요약정보를_반환한다() throws Exception {
@@ -149,5 +208,21 @@ class PropertyControllerTest {
                 .andExpect(jsonPath("$.error").value((Object) null));
 
         verify(propertyCommandService).updatePriorities(request, USER_KEY);
+    }
+
+    private String confirmRequest(String sourceUrl, String sourceType) {
+        return """
+                {
+                  "sourceType": "%s",
+                  "modelVersion": "gemini-3.5-flash-lite",
+                  "property": {
+                    "sourceSite": "SUUMO",
+                    "sourceUrl": "%s",
+                    "propertyName": "요코하마 스튜디오"
+                  },
+                  "propertyCostItems": [],
+                  "rawResult": {"property": {"key_money": 0}}
+                }
+                """.formatted(sourceType, sourceUrl);
     }
 }

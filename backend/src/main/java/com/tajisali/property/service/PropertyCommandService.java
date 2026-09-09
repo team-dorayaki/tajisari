@@ -3,6 +3,10 @@ package com.tajisali.property.service;
 import com.tajisali.common.exception.BusinessException;
 import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.property.domain.Property;
+import com.tajisali.property.domain.PropertyAiAnalysis;
+import com.tajisali.property.domain.PropertyCostItem;
+import com.tajisali.property.dto.PropertyConfirmRequest;
+import com.tajisali.property.dto.PropertyConfirmResponse;
 import com.tajisali.property.dto.PropertyPriorityUpdateRequest;
 import com.tajisali.property.dto.PropertyPriorityUpdateResponse;
 import com.tajisali.property.repository.PropertyAiAnalysisRepository;
@@ -15,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -28,6 +33,42 @@ public class PropertyCommandService {
     private final PropertyImageRepository propertyImageRepository;
     private final PropertyCostItemRepository propertyCostItemRepository;
     private final AnonymousUserService anonymousUserService;
+    private final PropertyCostCalculationService propertyCostCalculationService;
+
+    @Transactional
+    public PropertyConfirmResult confirmUrl(PropertyConfirmRequest request, String userKey) {
+        User user = anonymousUserService.resolveOrCreate(userKey);
+        LocalDateTime createdAt = LocalDateTime.now();
+        Property property = createProperty(user, request, createdAt);
+
+        List<PropertyCostItem> costItems = request.propertyCostItems().stream()
+                .map(costItem -> new PropertyCostItem(
+                        property,
+                        costItem.rawName(),
+                        costItem.displayName(),
+                        costItem.amount(),
+                        costItem.rawValue(),
+                        costItem.obligationStatus(),
+                        costItem.includedInCalculation(),
+                        costItem.timing(),
+                        createdAt))
+                .toList();
+        property.addCostItems(costItems);
+        PropertyCostCalculationResult costCalculation = propertyCostCalculationService.calculate(property);
+        property.confirmCosts(costCalculation.initialCost(), costCalculation.monthlyCost());
+
+        Property savedProperty = propertyRepository.save(property);
+        propertyCostItemRepository.saveAll(costItems);
+        propertyAiAnalysisRepository.save(new PropertyAiAnalysis(
+                savedProperty,
+                request.sourceType().name(),
+                request.rawResult().toString(),
+                request.modelVersion(),
+                createdAt));
+
+        return new PropertyConfirmResult(
+                new PropertyConfirmResponse(savedProperty.getId()), user.getUserKey());
+    }
 
     @Transactional
     public void deleteProperty(Long propertyId, String userKey) {
@@ -72,6 +113,31 @@ public class PropertyCommandService {
                 request.firstPriorityPropertyId(), request.secondPriorityPropertyId())) {
             throw new BusinessException(ErrorCode.PROPERTY_DUPLICATE_PRIORITY);
         }
+    }
+
+    private Property createProperty(
+            User user,
+            PropertyConfirmRequest request,
+            LocalDateTime createdAt) {
+        PropertyConfirmRequest.PropertyInfo property = request.property();
+        return new Property(
+                user,
+                property.sourceSite().name(),
+                property.sourceUrl(),
+                property.propertyName(),
+                property.prefecture(),
+                property.city(),
+                property.exclusiveAreaM2(),
+                property.nearestStation(),
+                property.walkMinutes(),
+                property.rent(),
+                property.managementFee(),
+                property.deposit(),
+                property.keyMoney(),
+                property.availableFrom(),
+                property.contractPeriodMonths(),
+                property.listedInitialCostTotal(),
+                createdAt);
     }
 
     private Property findOwnedProperty(Long propertyId, Long userId) {

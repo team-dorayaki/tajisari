@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "property_cost_item")
@@ -55,5 +56,27 @@ public class PropertyCostItem {
     public boolean isCalculated() {
         return obligationStatus == ObligationStatus.REQUIRED
                 || (obligationStatus == ObligationStatus.OPTIONAL && includedInCalculation);
+    }
+
+    public PropertyCostItem(
+            Property property,
+            String rawName,
+            String displayName,
+            Long amount,
+            String rawValue,
+            ObligationStatus obligationStatus,
+            boolean includedInCalculation,
+            CostTiming timing,
+            LocalDateTime createdAt) {
+        this.property = Objects.requireNonNull(property, "property must not be null");
+        this.rawName = rawName;
+        this.displayName = displayName;
+        this.amount = amount;
+        this.rawValue = rawValue;
+        this.obligationStatus = obligationStatus;
+        this.includedInCalculation = includedInCalculation;
+        this.timing = timing;
+        this.createdAt = createdAt;
+        this.updatedAt = createdAt;
     }
 }
