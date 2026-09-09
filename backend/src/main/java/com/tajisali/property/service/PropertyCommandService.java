@@ -5,6 +5,9 @@ import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.property.domain.Property;
 import com.tajisali.property.dto.PropertyPriorityUpdateRequest;
 import com.tajisali.property.dto.PropertyPriorityUpdateResponse;
+import com.tajisali.property.repository.PropertyAiAnalysisRepository;
+import com.tajisali.property.repository.PropertyCostItemRepository;
+import com.tajisali.property.repository.PropertyImageRepository;
 import com.tajisali.property.repository.PropertyRepository;
 import com.tajisali.user.domain.User;
 import com.tajisali.user.service.AnonymousUserService;
@@ -21,15 +24,21 @@ import java.util.Objects;
 public class PropertyCommandService {
 
     private final PropertyRepository propertyRepository;
+    private final PropertyAiAnalysisRepository propertyAiAnalysisRepository;
+    private final PropertyImageRepository propertyImageRepository;
+    private final PropertyCostItemRepository propertyCostItemRepository;
     private final AnonymousUserService anonymousUserService;
 
     @Transactional
     public void deleteProperty(Long propertyId, String userKey) {
         User user = anonymousUserService.findExisting(userKey)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROPERTY_NOT_FOUND));
-        Property property = propertyRepository.findByIdAndUserId(propertyId, user.getId())
+        Property property = propertyRepository.findOwnedById(propertyId, user.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROPERTY_NOT_FOUND));
 
+        propertyAiAnalysisRepository.deleteAllByPropertyId(propertyId);
+        propertyImageRepository.deleteAllByPropertyId(propertyId);
+        propertyCostItemRepository.deleteAllByPropertyId(propertyId);
         propertyRepository.delete(property);
     }
 
@@ -69,7 +78,7 @@ public class PropertyCommandService {
         if (propertyId == null) {
             return null;
         }
-        return propertyRepository.findByIdAndUserId(propertyId, userId)
+        return propertyRepository.findOwnedById(propertyId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROPERTY_NOT_FOUND));
     }
 
