@@ -30,7 +30,7 @@ function PropertyAnalysisLoadingPage() {
           ? await analyzePropertyImages(request.files)
           : await analyzePropertyUrl(request.url)
         if (cancelled) return
-        loadAnalysisResult(result)
+        loadAnalysisResult(result, request.kind === "images" ? request.files : [])
         void navigate("/properties/costs", { replace: true })
       } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : "매물 분석에 실패했어요.")
