@@ -128,20 +128,32 @@ function PropertyRegistrationPage() {
 
 function ImageRegistrationPage() {
   const navigate = useNavigate()
-  const [images, setImages] = useState<string[]>([])
+  const [images, setImages] = useState<Array<{ file: File; preview: string }>>([])
+  const [error, setError] = useState<string | null>(null)
 
   const addImages = (files: FileList | null) => {
     if (!files) return
 
-    Array.from(files)
-      .slice(0, 3 - images.length)
+    const selected = Array.from(files)
+    if (selected.length > 3 - images.length) {
+      setError("이미지는 최대 3장까지 등록할 수 있어요.")
+      return
+    }
+    const invalidFile = selected.find((file) => !["image/jpeg", "image/png", "image/webp", "image/bmp"].includes(file.type) || file.size > 15 * 1024 * 1024)
+    const totalSize = [...images.map((image) => image.file), ...selected].reduce((sum, file) => sum + file.size, 0)
+    if (invalidFile || totalSize > 50 * 1024 * 1024) {
+      setError("JPG, PNG, WebP, BMP 파일만 가능하며 파일당 최대 15MB, 전체 최대 50MB까지 등록할 수 있어요.")
+      return
+    }
+    setError(null)
+    selected
       .forEach((file) => {
         const reader = new FileReader()
         reader.onload = () => {
           const result = reader.result
 
           if (typeof result === "string") {
-            setImages((current) => [...current, result].slice(0, 3))
+            setImages((current) => [...current, { file, preview: result }].slice(0, 3))
           }
         }
         reader.readAsDataURL(file)
@@ -164,10 +176,10 @@ function ImageRegistrationPage() {
           <label className="mt-6 flex h-48 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--brand)] bg-white text-center">
             <Upload aria-hidden="true" className="size-7 text-[var(--brand)]" />
             <span className="mt-3 text-sm font-bold text-[var(--brand)]">이미지 업로드하기</span>
-            <span className="mt-2 text-xs text-[var(--text-secondary)]">JPG, PNG · 최대 3장</span>
+            <span className="mt-2 text-xs text-[var(--text-secondary)]">JPG, PNG, WebP, BMP · 최대 3장</span>
             <input
               type="file"
-              accept="image/jpeg,image/png"
+              accept="image/jpeg,image/png,image/webp,image/bmp"
               multiple
               onChange={(event) => addImages(event.target.files)}
               className="sr-only"
@@ -182,7 +194,7 @@ function ImageRegistrationPage() {
             <div className="mt-4 grid grid-cols-3 gap-2">
               {images.map((image, index) => (
                 <div key={`${image}-${index}`} className="relative aspect-[3/4] overflow-hidden rounded-lg bg-[#eef1f2]">
-                  <img src={image} alt={`등록 이미지 ${index + 1}`} className="size-full object-cover" />
+                  <img src={image.preview} alt={`등록 이미지 ${index + 1}`} className="size-full object-cover" />
                   <button
                     type="button"
                     onClick={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}
@@ -199,7 +211,7 @@ function ImageRegistrationPage() {
                 <Plus aria-hidden="true" className="size-4" /> 이미지 다시 선택
                 <input
                   type="file"
-                  accept="image/jpeg,image/png"
+                  accept="image/jpeg,image/png,image/webp,image/bmp"
                   multiple
                   onChange={(event) => addImages(event.target.files)}
                   className="sr-only"
@@ -210,6 +222,7 @@ function ImageRegistrationPage() {
         )}
 
         <div className="mt-5">
+          {error && <p role="alert" className="mb-3 text-xs text-[#d74e3c]">{error}</p>}
           {images.length > 0 ? (
             <InfoCard>
               <strong className="font-bold">등록한 {images.length}장의 이미지에서 비용을 추출해요</strong>
@@ -229,7 +242,7 @@ function ImageRegistrationPage() {
         <button
           type="button"
           disabled={images.length === 0}
-          onClick={() => void navigate("/properties/analyzing")}
+          onClick={() => void navigate("/properties/analyzing", { state: { kind: "images", files: images.map((image) => image.file) } })}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:bg-[#dce1e7]"
         >
           {images.length > 0 && <Sparkles aria-hidden="true" className="size-4" />}
@@ -244,6 +257,7 @@ function UrlRegistrationPage() {
   const navigate = useNavigate()
   const [url, setUrl] = useState("")
   const [confirmedUrl, setConfirmedUrl] = useState("")
+  const [error, setError] = useState<string | null>(null)
   const confirmed = confirmedUrl !== ""
 
   return (
@@ -299,6 +313,7 @@ function UrlRegistrationPage() {
         )}
 
         <div className="mt-5">
+          {error && <p role="alert" className="mb-3 text-xs text-[#d74e3c]">{error}</p>}
           {confirmed ? (
             <InfoCard>
               <strong className="font-bold">URL의 매물 정보에서 비용을 추출해요</strong>
@@ -320,9 +335,16 @@ function UrlRegistrationPage() {
           disabled={!confirmed && url.trim() === ""}
           onClick={() => {
             if (confirmed) {
-              void navigate("/properties/analyzing")
+              void navigate("/properties/analyzing", { state: { kind: "url", url: confirmedUrl } })
             } else {
-              setConfirmedUrl(url.trim())
+              try {
+                const candidate = new URL(url.trim())
+                if (candidate.protocol !== "http:" && candidate.protocol !== "https:") throw new Error()
+                setError(null)
+                setConfirmedUrl(candidate.toString())
+              } catch {
+                setError("http 또는 https 형식의 공개 매물 URL을 입력해주세요.")
+              }
             }
           }}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[var(--brand)] text-sm font-bold text-white disabled:bg-[#dce1e7]"

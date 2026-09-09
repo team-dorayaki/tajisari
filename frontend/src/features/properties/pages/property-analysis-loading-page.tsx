@@ -1,19 +1,44 @@
-import { useEffect } from "react"
-import { ArrowLeft } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { AlertCircle, ArrowLeft } from "lucide-react"
+import { useLocation, useNavigate } from "react-router-dom"
 
 import aiLoadingUrl from "@/features/properties/assets/ai_loading.png"
+import { analyzePropertyImages, analyzePropertyUrl } from "@/features/properties/api/property-analysis-api"
+import { usePropertyCostsStore } from "@/features/properties/store/property-costs-store"
+
+type AnalysisNavigationState =
+  | { kind: "images"; files: File[] }
+  | { kind: "url"; url: string }
 
 function PropertyAnalysisLoadingPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const loadAnalysisResult = usePropertyCostsStore((state) => state.loadAnalysisResult)
+  const [error, setError] = useState<string | null>(null)
+  const request = location.state as AnalysisNavigationState | null
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void navigate("/properties/costs", { replace: true })
-    }, 5000)
+    if (!request) {
+      void navigate("/properties/new", { replace: true })
+      return
+    }
 
-    return () => window.clearTimeout(timer)
-  }, [navigate])
+    let cancelled = false
+    const run = async () => {
+      try {
+        const result = request.kind === "images"
+          ? await analyzePropertyImages(request.files)
+          : await analyzePropertyUrl(request.url)
+        if (cancelled) return
+        loadAnalysisResult(result)
+        void navigate("/properties/costs", { replace: true })
+      } catch (caught) {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : "매물 분석에 실패했어요.")
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [loadAnalysisResult, navigate, request])
 
   return (
     <main className="flex min-h-dvh flex-col bg-[#f5f6f7]">
@@ -30,6 +55,14 @@ function PropertyAnalysisLoadingPage() {
       </header>
 
       <section className="flex flex-1 flex-col items-center px-6 pt-[22vh] text-center">
+        {error ? (
+          <>
+            <AlertCircle aria-hidden="true" className="size-10 text-[#ff705d]" />
+            <h2 className="mt-5 text-[20px] font-bold tracking-[-0.025em]">매물 분석에 실패했어요</h2>
+            <p className="mt-3 text-xs leading-5 text-[var(--text-secondary)]">{error}</p>
+            <button type="button" onClick={() => void navigate(-1)} className="mt-7 h-12 rounded-lg bg-[var(--brand)] px-5 text-sm font-bold text-white">다시 등록하기</button>
+          </>
+        ) : <>
         <div
           role="img"
           aria-label="매물 정보를 살펴보는 타지살이 캐릭터"
@@ -54,6 +87,7 @@ function PropertyAnalysisLoadingPage() {
           <span className="size-2 animate-pulse rounded-full bg-[var(--brand)]/25 [animation-delay:300ms]" />
         </div>
         <p className="mt-5 text-[11px] text-[#a3aab2]">잠시만 기다려주세요</p>
+        </>}
       </section>
     </main>
   )

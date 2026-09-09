@@ -1,6 +1,7 @@
 import { create } from "zustand"
 
 import { analyzePropertyCosts, fetchPropertyCosts, saveProperty } from "@/features/properties/api/property-costs-api"
+import type { PropertyAnalysisResult } from "@/features/properties/api/property-analysis-api"
 import type { CostTiming, PropertyCostItem, PropertyCostReviewResponse, RequiredCostConfirmation } from "@/features/properties/types/property-costs"
 
 type VerificationType = "AMOUNT" | "OCCURRENCE_TIMING" | "REQUIREDNESS" | "BROKER_CONFIRMATION"
@@ -73,6 +74,7 @@ type PropertyCostsState = {
   saveReviewDraft: () => void
   discardReviewDraft: () => void
   clearSubmissionError: () => void
+  loadAnalysisResult: (result: PropertyAnalysisResult) => void
   loadPropertyCosts: () => Promise<void>
   submitPropertyAndAnalyze: () => Promise<string>
 }
@@ -200,6 +202,53 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
     })),
   discardReviewDraft: () => set({ draftVerificationAnswers: {}, draftSelectedCostIds: null }),
   clearSubmissionError: () => set({ submissionError: null }),
+  loadAnalysisResult: (result) => {
+    const { property, propertyCostItems } = result
+    const propertyId = globalThis.crypto.randomUUID()
+    const now = new Date().toISOString()
+    const review: PropertyCostReviewResponse = {
+      property: {
+        propertyId,
+        sourceSite: property.sourceSite as PropertyCostReviewResponse["property"]["sourceSite"],
+        sourceUrl: property.sourceUrl,
+        name: property.propertyName?.trim() || "이름 없는 매물",
+        area: [property.prefecture, property.city].filter(Boolean).join(" ") || "지역 미확인",
+        rent: property.rent,
+        managementFee: property.managementFee,
+        deposit: property.deposit,
+        keyMoney: property.keyMoney,
+        availableFrom: property.availableFrom,
+        contractPeriodMonths: property.contractPeriodMonths,
+        listedInitialCostTotal: property.listedInitialCostTotal,
+        createdAt: now,
+        updatedAt: now,
+      },
+      costItems: propertyCostItems.map((item, index) => ({
+        costItemId: `${propertyId}-${index}`,
+        propertyId,
+        ...item,
+        createdAt: now,
+        updatedAt: now,
+      })),
+      requiredConfirmations: [],
+    }
+    set({
+      propertyInfo: {
+        name: review.property.name,
+        area: review.property.area,
+        moveInDate: review.property.availableFrom ?? "",
+        contractMonths: review.property.contractPeriodMonths?.toString() ?? "",
+      },
+      siteInitialCost: review.property.listedInitialCostTotal ?? 0,
+      costSections: toCostSections(review, []),
+      requiredConfirmations: [],
+      savedPropertyId: null,
+      reviewStatus: "success",
+      reviewError: null,
+      submissionStatus: "idle",
+      submissionError: null,
+    })
+  },
   loadPropertyCosts: async () => {
     if (get().reviewStatus === "loading") return
     set({ reviewStatus: "loading", reviewError: null })

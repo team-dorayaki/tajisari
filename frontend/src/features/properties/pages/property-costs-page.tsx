@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { AlertCircle, ArrowLeft, Check, ChevronRight, Info, LoaderCircle, X } from "lucide-react"
 import { Controller, useForm, useWatch, type UseFormRegisterReturn } from "react-hook-form"
@@ -503,36 +503,18 @@ function PropertyCostsPage() {
   const submissionError = usePropertyCostsStore((state) => state.submissionError)
   const clearSubmissionError = usePropertyCostsStore((state) => state.clearSubmissionError)
   const reviewStatus = usePropertyCostsStore((state) => state.reviewStatus)
-  const reviewError = usePropertyCostsStore((state) => state.reviewError)
-  const loadPropertyCosts = usePropertyCostsStore((state) => state.loadPropertyCosts)
   const submitPropertyAndAnalyze = usePropertyCostsStore((state) => state.submitPropertyAndAnalyze)
 
-  useEffect(() => {
-    if (reviewStatus === "idle") void loadPropertyCosts()
-  }, [loadPropertyCosts, reviewStatus])
-
-  if (reviewStatus === "idle" || reviewStatus === "loading") {
-    return (
-      <main className="min-h-dvh bg-[#f5f6f7]">
-        <CostsHeader title="비용 확인" />
-        <section className="flex min-h-[calc(100dvh-64px)] flex-col items-center justify-center px-6 text-center" aria-live="polite">
-          <span className="size-8 animate-spin rounded-full border-4 border-[var(--brand-soft)] border-t-[var(--brand)]" aria-hidden="true" />
-          <h2 className="mt-5 text-base font-bold">추출한 비용을 불러오고 있어요</h2>
-        </section>
-      </main>
-    )
-  }
-
-  if (reviewStatus === "error") {
+  if (reviewStatus !== "success") {
     return (
       <main className="min-h-dvh bg-[#f5f6f7]">
         <CostsHeader title="비용 확인" />
         <section className="flex min-h-[calc(100dvh-64px)] flex-col items-center justify-center px-6 text-center" role="alert">
           <AlertCircle aria-hidden="true" className="size-9 text-[#ff705d]" />
-          <h2 className="mt-4 text-base font-bold">비용 정보를 불러오지 못했어요</h2>
-          <p className="mt-2 text-xs text-[var(--text-secondary)]">{reviewError}</p>
-          <button type="button" onClick={() => void loadPropertyCosts()} className="mt-6 h-12 min-w-36 rounded-lg bg-[var(--brand)] px-5 text-sm font-bold text-white">
-            다시 시도하기
+          <h2 className="mt-4 text-base font-bold">분석 결과가 없어요</h2>
+          <p className="mt-2 text-xs text-[var(--text-secondary)]">매물을 등록하고 AI 분석을 완료한 뒤 확인해주세요.</p>
+          <button type="button" onClick={() => void navigate("/properties/new", { replace: true })} className="mt-6 h-12 min-w-36 rounded-lg bg-[var(--brand)] px-5 text-sm font-bold text-white">
+            매물 등록하기
           </button>
         </section>
       </main>
