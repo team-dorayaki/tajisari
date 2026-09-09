@@ -28,4 +28,8 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
     Optional<Property> findOwnedById(Long propertyId, Long userId);
 
     List<Property> findAllByUserId(Long userId);
+
+    boolean existsByUserId(Long userId);
+
+    boolean existsByUserIdAndPriorityRankIsNotNull(Long userId);
 }
