@@ -7,7 +7,6 @@ public record PropertyListResponse(long totalCount, List<PropertySummary> proper
 
     public record PropertySummary(
             Long propertyId,
-            Long analysisId,
             String propertyName,
             Long rent,
             Long initialCost,

@@ -9,7 +9,6 @@ import java.util.List;
 
 public record PropertyDetailResponse(
         Long propertyId,
-        Long analysisId,
         Long settlementPlanId,
         PropertyInfo property,
         List<String> imageUrls,
