@@ -5,7 +5,6 @@ import { Controller, useForm, useWatch, type UseFormRegisterReturn } from "react
 import { useNavigate } from "react-router-dom"
 import { z } from "zod"
 
-import { BrandInsightCard } from "@/components/ui/brand-insight-card"
 import { ErrorToast } from "@/components/ui/error-toast"
 import { usePropertyCostsStore } from "@/features/properties/store/property-costs-store"
 import type { CostItem, CostSectionData, CostVerification, PropertyInfo, VerificationType } from "@/features/properties/store/property-costs-store"
@@ -480,21 +479,10 @@ function getCostItemBadge(item: CostItem) {
   return undefined
 }
 
-function isIncludedInInitialCost(item: CostItem) {
-  if (item.calculationPeriod !== "INITIAL" || item.amount === null || item.selectable || item.conditional) return false
-  if (item.verifications.some((verification) => verification.status === "PENDING")) return false
-  return !item.verifications.some((verification) => ["OPTIONAL", "DUPLICATE", "UNKNOWN"].includes(verification.answer ?? ""))
-}
-
-function formatYen(value: number) {
-  return `¥${value.toLocaleString("en-US")}`
-}
-
 function PropertyCostsPage() {
   const navigate = useNavigate()
   const [editSheet, setEditSheet] = useState<"property" | string | null>(null)
   const propertyInfo = usePropertyCostsStore((state) => state.propertyInfo)
-  const siteInitialCost = usePropertyCostsStore((state) => state.siteInitialCost)
   const costSections = usePropertyCostsStore((state) => state.costSections)
   const requiredConfirmations = usePropertyCostsStore((state) => state.requiredConfirmations)
   const updatePropertyInfo = usePropertyCostsStore((state) => state.updatePropertyInfo)
@@ -521,13 +509,6 @@ function PropertyCostsPage() {
     )
   }
   const pendingCount = requiredConfirmations.filter((confirmation) => confirmation.status === "PENDING").length
-  const confirmedInitialCost = costSections.flatMap((section) => section.items)
-    .filter(isIncludedInInitialCost)
-    .reduce((sum, item) => sum + (item.amount ?? 0), 0)
-  const initialCostDifference = confirmedInitialCost - siteInitialCost
-  const chartMaximum = Math.max(siteInitialCost, confirmedInitialCost, 1)
-  const siteBarHeight = Math.max(64, Math.round((siteInitialCost / chartMaximum) * 112))
-  const confirmedBarHeight = Math.max(64, Math.round((confirmedInitialCost / chartMaximum) * 112))
   const activeEditSection = costSections.find((section) => section.id === editSheet)
   const isSubmitting = submissionStatus === "saving" || submissionStatus === "analyzing"
   const submitButtonLabel = submissionStatus === "saving"
@@ -608,31 +589,6 @@ function PropertyCostsPage() {
           onEdit={() => setEditSheet(section.id)}
         />
       ))}
-
-      <section className="bg-white px-4 pt-6 pb-10">
-        <h2 className="text-base font-bold">초기비용 비교</h2>
-        <p className="mt-1 text-xs text-[var(--text-secondary)]">
-          {initialCostDifference >= 0
-            ? `사이트가 안내한 금액보다 추가 비용 ${formatYen(initialCostDifference)}을 더 찾았어요.`
-            : `사이트 안내 금액보다 ${formatYen(Math.abs(initialCostDifference))} 적게 확인됐어요.`}
-        </p>
-        <div className="mt-6 flex h-40 items-end justify-center gap-6">
-          <div className="text-center">
-            <span className="mb-2 block text-xs font-bold">{formatYen(siteInitialCost)}</span>
-            <div className="w-20 rounded-t-lg bg-[#aeb8c4]" style={{ height: siteBarHeight }} />
-            <span className="mt-2 block text-[11px] text-[var(--text-secondary)]">사이트 안내</span>
-          </div>
-          <div className="text-center">
-            <span className="mb-2 block text-xs font-bold text-[var(--brand)]">{formatYen(confirmedInitialCost)}</span>
-            <div className="w-20 rounded-t-lg bg-[var(--brand)]" style={{ height: confirmedBarHeight }} />
-            <span className="mt-2 block text-[11px] text-[var(--text-secondary)]">타지살이 확인</span>
-          </div>
-        </div>
-        <BrandInsightCard className="mt-5" title="타지살이가 추가로 확인한 비용">
-          선불 월세·보증회사료 등 사이트 총액에서 빠질 수 있는 항목을 포함했어요.
-        </BrandInsightCard>
-        <p className="mt-4 text-xs text-[#ff705d]">선택·확인 필요·조건부 비용은 {formatYen(confirmedInitialCost)}에 포함하지 않았어요.</p>
-      </section>
 
       <section className="relative bg-[#f5f6f7] px-4 pt-6 pb-[calc(18px+env(safe-area-inset-bottom))]">
         {submissionError && (

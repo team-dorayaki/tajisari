@@ -58,7 +58,6 @@ type ReviewStatus = "idle" | "loading" | "success" | "error"
 
 type PropertyCostsState = {
   propertyInfo: PropertyInfo
-  siteInitialCost: number
   costSections: CostSectionData[]
   requiredConfirmations: RequiredCostConfirmation[]
   draftVerificationAnswers: Record<string, string>
@@ -162,7 +161,6 @@ const timingPeriod: Record<string, CalculationPeriod> = {
 
 const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
   propertyInfo: { name: "", area: "", moveInDate: "", contractMonths: "" },
-  siteInitialCost: 0,
   costSections: [],
   requiredConfirmations: [],
   draftVerificationAnswers: {},
@@ -266,7 +264,6 @@ const usePropertyCostsStore = create<PropertyCostsState>((set, get) => ({
         moveInDate: review.property.availableFrom ?? "",
         contractMonths: review.property.contractPeriodMonths?.toString() ?? "",
       },
-      siteInitialCost: review.property.listedInitialCostTotal ?? 0,
       costSections: toCostSections(review, requiredConfirmations),
       requiredConfirmations,
       savedPropertyId: null,
