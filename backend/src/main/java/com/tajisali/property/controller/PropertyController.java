@@ -1,26 +1,37 @@
 package com.tajisali.property.controller;
 
 import com.tajisali.common.response.ApiResponse;
+import com.tajisali.property.dto.PropertyConfirmRequest;
+import com.tajisali.property.dto.PropertyConfirmResponse;
 import com.tajisali.property.dto.PropertyDetailResponse;
 import com.tajisali.property.dto.PropertyListResponse;
 import com.tajisali.property.dto.PropertyPriorityUpdateRequest;
 import com.tajisali.property.dto.PropertyPriorityUpdateResponse;
 import com.tajisali.property.service.PropertyCommandService;
+import com.tajisali.property.service.PropertyConfirmResult;
 import com.tajisali.property.service.PropertyQueryService;
+import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Duration;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/api/properties")
@@ -28,9 +39,30 @@ import org.springframework.web.bind.annotation.RestController;
 public class PropertyController {
 
     private static final String ANONYMOUS_USER_COOKIE = "tajisari_anonymous_user";
+    private static final Duration ANONYMOUS_USER_COOKIE_MAX_AGE = Duration.ofDays(365);
 
     private final PropertyQueryService propertyQueryService;
     private final PropertyCommandService propertyCommandService;
+
+    @PostMapping("/confirm")
+    public ResponseEntity<ApiResponse<PropertyConfirmResponse>> confirmUrlProperty(
+            @Valid @RequestBody PropertyConfirmRequest request,
+            @CookieValue(name = ANONYMOUS_USER_COOKIE, required = false) String userKey) {
+        PropertyConfirmResult result = propertyCommandService.confirmUrl(request, userKey);
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.status(HttpStatus.CREATED);
+
+        if (!Objects.equals(userKey, result.userKey())) {
+            ResponseCookie cookie = ResponseCookie.from(ANONYMOUS_USER_COOKIE, result.userKey())
+                    .httpOnly(true)
+                    .path("/")
+                    .sameSite("Lax")
+                    .maxAge(ANONYMOUS_USER_COOKIE_MAX_AGE)
+                    .build();
+            responseBuilder.header(HttpHeaders.SET_COOKIE, cookie.toString());
+        }
+
+        return responseBuilder.body(ApiResponse.success(result.response()));
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<PropertyListResponse>> getProperties(

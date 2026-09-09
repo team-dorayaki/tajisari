@@ -112,6 +112,44 @@ public class Property {
         this.updatedAt = createdAt;
     }
 
+    public Property(
+            User user,
+            String sourceSite,
+            String sourceUrl,
+            String propertyName,
+            String prefecture,
+            String city,
+            BigDecimal exclusiveAreaM2,
+            String nearestStation,
+            Integer walkMinutes,
+            Long rent,
+            Long managementFee,
+            Long deposit,
+            Long keyMoney,
+            LocalDate availableFrom,
+            Integer contractPeriodMonths,
+            Long listedInitialCostTotal,
+            LocalDateTime createdAt) {
+        this.user = Objects.requireNonNull(user, "user must not be null");
+        this.sourceSite = sourceSite;
+        this.sourceUrl = sourceUrl;
+        this.propertyName = propertyName;
+        this.prefecture = prefecture;
+        this.city = city;
+        this.exclusiveAreaM2 = exclusiveAreaM2;
+        this.nearestStation = nearestStation;
+        this.walkMinutes = walkMinutes;
+        this.rent = rent;
+        this.managementFee = managementFee;
+        this.deposit = deposit;
+        this.keyMoney = keyMoney;
+        this.availableFrom = availableFrom;
+        this.contractPeriodMonths = contractPeriodMonths;
+        this.listedInitialCostTotal = listedInitialCostTotal;
+        this.createdAt = createdAt;
+        this.updatedAt = createdAt;
+    }
+
     public void assignOwner(User user) {
         this.user = Objects.requireNonNull(user, "user must not be null");
     }
