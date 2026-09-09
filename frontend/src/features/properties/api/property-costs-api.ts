@@ -1,10 +1,27 @@
-import type { CostSectionData, PropertyInfo } from "@/features/properties/store/property-costs-store"
 import type { PropertyCostReviewResponse } from "@/features/properties/types/property-costs"
 
 type SavePropertyRequest = {
-  propertyInfo: PropertyInfo
-  siteInitialCost: number
-  costSections: CostSectionData[]
+  sourceType: "IMAGE" | "URL" | "BOTH"
+  modelVersion: string
+  property: {
+    sourceSite: string
+    sourceUrl: string | null
+    propertyName: string
+    prefecture: string | null
+    city: string | null
+    exclusiveAreaM2: number | null
+    nearestStation: string | null
+    walkMinutes: number | null
+    rent: number | null
+    managementFee: number | null
+    deposit: number | null
+    keyMoney: number | null
+    availableFrom: string | null
+    contractPeriodMonths: number | null
+    listedInitialCostTotal: number | null
+  }
+  propertyCostItems: Array<{ rawName: string; displayName: string; amount: number | null; rawValue: string | null; obligationStatus: "REQUIRED" | "OPTIONAL" | "UNKNOWN"; includedInCalculation: boolean; timing: "INITIAL" | "MONTHLY" | "RENEWAL" | "MOVE_OUT" | "CONDITIONAL" | "UNKNOWN" }>
+  rawResult: unknown
 }
 
 type SavePropertyResponse = {
@@ -77,11 +94,17 @@ async function fetchPropertyCosts(): Promise<PropertyCostReviewResponse> {
 }
 
 async function saveProperty(payload: SavePropertyRequest): Promise<SavePropertyResponse> {
-  void payload
-  await waitForMockResponse()
-  consumeMockFailure("save")
-
-  return { propertyId: globalThis.crypto.randomUUID() }
+  const response = await fetch("/api/properties/confirm", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  const body = await response.json().catch(() => null) as { success: boolean; data: { propertyId: number } | null; error?: { message?: string } | null } | null
+  if (!response.ok || !body?.success || body.data === null) {
+    throw new Error(body?.error?.message ?? "매물 저장에 실패했어요. 다시 시도해주세요.")
+  }
+  return { propertyId: String(body.data.propertyId) }
 }
 
 async function analyzePropertyCosts(propertyId: string): Promise<void> {

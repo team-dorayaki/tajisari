@@ -9,12 +9,26 @@ type AnalysisCostItem = {
 
 type PropertyAnalysisResult = {
   inputType: "images" | "url"
+  modelVersion: string
+  rawResult: unknown
+  analysisMetadata: {
+    sourceType: "IMAGE" | "URL" | "BOTH"
+  }
+  analysisDetails: {
+    costItemAnalysis: Array<{
+      costItemIndex: number
+      needsReview: boolean
+    }>
+  }
   property: {
     sourceSite: string | null
     sourceUrl: string | null
     propertyName: string | null
     prefecture: string | null
     city: string | null
+    exclusiveAreaM2: number | null
+    nearestStation: string | null
+    walkMinutes: number | null
     rent: number | null
     managementFee: number | null
     deposit: number | null
@@ -32,8 +46,8 @@ type ApiResponse<T> = {
   error: { code?: string; message?: string } | null
 }
 
-async function requestAnalysis(path: string, body: BodyInit) {
-  const response = await fetch(path, { body, method: "POST", credentials: "same-origin" })
+async function requestAnalysis(path: string, body: BodyInit, headers?: HeadersInit) {
+  const response = await fetch(path, { body, method: "POST", credentials: "same-origin", headers })
   const payload = await response.json().catch(() => null) as ApiResponse<PropertyAnalysisResult> | null
 
   if (!response.ok || !payload?.success || payload.data === null) {
@@ -50,7 +64,7 @@ async function analyzePropertyImages(files: File[]) {
 }
 
 async function analyzePropertyUrl(url: string) {
-  return requestAnalysis("/api/property-analyses/url", JSON.stringify({ url }))
+  return requestAnalysis("/api/property-analyses/url", JSON.stringify({ url }), { "Content-Type": "application/json" })
 }
 
 export { analyzePropertyImages, analyzePropertyUrl }
