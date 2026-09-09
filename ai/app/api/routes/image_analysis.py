@@ -80,7 +80,17 @@ async def analyze_images_endpoint(
         result = await run_in_threadpool(
             analyze_uploaded_images, uploaded_images, None, selected_model
         )
-        return AnalysisResponse(input_type="images", model=selected_model, result=result)
+        cost_model = settings.cost_model or (
+            "gemini-3.5-flash" if settings.analysis_mode == "dual35" else "gemini-3.6-flash"
+        )
+        response_model = (
+            f"{settings.fixed_model}+{cost_model}"
+            if settings.analysis_mode != "single"
+            else selected_model
+        )
+        return AnalysisResponse(
+            input_type="images", model=response_model, result=result
+        )
     except AppError:
         raise
     except Exception as error:
@@ -99,7 +109,15 @@ async def analyze_url_endpoint(request: UrlAnalysisRequest) -> AnalysisResponse:
         result = await run_in_threadpool(
             analyze_property_url, str(request.url), None, selected_model
         )
-        return AnalysisResponse(input_type="url", model=selected_model, result=result)
+        cost_model = settings.cost_model or (
+            "gemini-3.5-flash" if settings.analysis_mode == "dual35" else "gemini-3.6-flash"
+        )
+        response_model = (
+            f"{settings.fixed_model}+{cost_model}"
+            if settings.analysis_mode != "single"
+            else selected_model
+        )
+        return AnalysisResponse(input_type="url", model=response_model, result=result)
     except AppError:
         raise
     except Exception as error:
