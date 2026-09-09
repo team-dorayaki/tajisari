@@ -1,16 +1,14 @@
 package com.tajisali.property.service;
 
-import com.tajisali.common.constants.ExchangeRateConstants;
+import com.tajisali.exchange.service.ExchangeRateService;
 import com.tajisali.property.domain.Property;
 import com.tajisali.property.domain.CostTiming;
 import com.tajisali.property.domain.PropertyCostItem;
 import com.tajisali.property.dto.PropertyDetailResponse;
 import com.tajisali.property.dto.PropertyListResponse;
 import com.tajisali.property.repository.PropertyRepository;
-import com.tajisali.settlement.domain.CostCategory;
-import com.tajisali.settlement.domain.CurrencyCode;
+import com.tajisali.settlement.domain.MonthlyLivingCostInputMethod;
 import com.tajisali.settlement.domain.SettlementPlan;
-import com.tajisali.settlement.domain.SettlementPlanCostItem;
 import com.tajisali.settlement.repository.SettlementPlanRepository;
 import com.tajisali.common.exception.BusinessException;
 import com.tajisali.common.exception.ErrorCode;
@@ -20,9 +18,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-
 @Service
 @RequiredArgsConstructor
 public class PropertyQueryService {
@@ -31,6 +26,7 @@ public class PropertyQueryService {
     private final SettlementPlanRepository settlementPlanRepository;
     private final AnonymousUserService anonymousUserService;
     private final PropertyCostCalculationService propertyCostCalculationService;
+    private final PropertyFundSimulationService propertyFundSimulationService;
 
     @Transactional(readOnly = true)
     public PropertyListResponse getProperties(String userKey) {
@@ -83,15 +79,15 @@ public class PropertyQueryService {
                         property.getManagementFee(),
                         property.getDeposit(),
                         property.getKeyMoney(),
-                        costCalculation.initialCost(),
-                        costCalculation.monthlyCost(),
+                        property.getConfirmedInitialCost(),
+                        property.getConfirmedMonthlyCost(),
                         costCalculation.refundableAmount(),
                         costCalculation.nonRefundableAmount(),
                         costCalculation.hasUnknownInitialCosts(),
                         costCalculation.hasUnknownMonthlyCosts(),
                         costCalculation.hasUnclassifiedCosts(),
                         property.getCostItems().stream().map(this::toCostItem).toList()),
-                plan == null ? null : createSimulation(property, plan));
+                createSimulation(property, plan));
     }
 
     private PropertyDetailResponse.CostItem toCostItem(PropertyCostItem item) {
@@ -111,40 +107,39 @@ public class PropertyQueryService {
 
     private PropertyDetailResponse.Simulation createSimulation(
             Property property, SettlementPlan plan) {
-        long availableFunds = toJpy(plan.getPreparedFundsKrw() - plan.getEmergencyReserveKrw())
-                .add(BigDecimal.valueOf(plan.getPreparedFundsJpy() - plan.getEmergencyReserveJpy()))
-                .setScale(0, RoundingMode.DOWN)
-                .longValue();
-        long initialCost = valueOrZero(initialCostOf(property))
-                + costItemTotalInJpy(plan, CostCategory.INITIAL)
-                .setScale(0, RoundingMode.DOWN)
-                .longValue();
-        long monthlyHousingCost = monthlyCostOf(property);
-        long monthlyLivingCost = costItemTotalInJpy(plan, CostCategory.MONTHLY)
-                .setScale(0, RoundingMode.DOWN)
-                .longValue();
-        long totalMonthlyCost = monthlyHousingCost + monthlyLivingCost;
-        long balanceAfterMoveIn = availableFunds - initialCost;
-        BigDecimal livingMonths = totalMonthlyCost == 0
-                ? null
-                : BigDecimal.valueOf(Math.max(balanceAfterMoveIn, 0L))
-                .divide(BigDecimal.valueOf(totalMonthlyCost), 1, RoundingMode.DOWN);
-        long balanceAfterPlannedStay = balanceAfterMoveIn
-                - totalMonthlyCost * plan.getPlannedStayMonths();
+        if (plan == null
+                || plan.getMonthlyLivingCostInputMethod() != MonthlyLivingCostInputMethod.DIRECT
+                || property.getConfirmedInitialCost() == null
+                || property.getConfirmedMonthlyCost() == null) {
+            return null;
+        }
 
+        PropertyFundSimulationResult result = propertyFundSimulationService.calculate(
+                property.getConfirmedInitialCost(),
+                property.getConfirmedMonthlyCost(),
+                plan);
         return new PropertyDetailResponse.Simulation(
                 new PropertyDetailResponse.ExchangeRate(
-                        100, ExchangeRateConstants.KRW_PER_100_JPY.intValueExact()),
-                availableFunds,
-                initialCost,
-                balanceAfterMoveIn,
-                monthlyHousingCost,
-                monthlyLivingCost,
-                totalMonthlyCost,
-                livingMonths,
-                plan.getPlannedStayMonths(),
-                balanceAfterPlannedStay,
-                Math.max(-balanceAfterPlannedStay, 0L));
+                        Math.toIntExact(ExchangeRateService.BASE_JPY),
+                        Math.toIntExact(ExchangeRateService.KRW_PER_100_JPY)),
+                result.availableFunds(),
+                result.initialCost(),
+                result.canMoveIn(),
+                result.balanceAfterMoveIn(),
+                result.monthlyHousingCost(),
+                result.monthlyLivingCost(),
+                result.totalMonthlyCost(),
+                result.monthlyBalances().stream()
+                        .map(balance -> new PropertyDetailResponse.MonthlyBalance(
+                                balance.month(), balance.balance()))
+                        .toList(),
+                result.livingMonths(),
+                result.isUnlimited(),
+                result.plannedStayMonths(),
+                result.requiredFunds(),
+                result.surplus(),
+                result.shortageJpy(),
+                result.shortageKrw());
     }
 
     private PropertyListResponse.PropertySummary toSummary(
@@ -152,73 +147,16 @@ public class PropertyQueryService {
         String thumbnailUrl = property.getImages().isEmpty()
                 ? null
                 : property.getImages().getFirst().getStorageKey();
+        PropertyDetailResponse.Simulation simulation = createSimulation(property, settlementPlan);
 
         return new PropertyListResponse.PropertySummary(
                 property.getId(),
                 property.getPropertyName(),
                 property.getRent(),
-                initialCostOf(property),
-                calculateLivingMonths(property, settlementPlan),
+                property.getConfirmedInitialCost(),
+                simulation == null ? null : simulation.livingMonths(),
                 property.getPriorityRank(),
                 thumbnailUrl);
-    }
-
-    private Long initialCostOf(Property property) {
-        return property.getConfirmedInitialCost() != null
-                ? property.getConfirmedInitialCost()
-                : property.getListedInitialCostTotal();
-    }
-
-    private BigDecimal calculateLivingMonths(Property property, SettlementPlan plan) {
-        if (plan == null) {
-            return null;
-        }
-
-        BigDecimal usableFunds = toJpy(plan.getPreparedFundsKrw() - plan.getEmergencyReserveKrw())
-                .add(BigDecimal.valueOf(plan.getPreparedFundsJpy() - plan.getEmergencyReserveJpy()));
-        BigDecimal initialCosts = BigDecimal.valueOf(valueOrZero(initialCostOf(property)))
-                .add(costItemTotalInJpy(plan, CostCategory.INITIAL));
-        BigDecimal monthlyCosts = BigDecimal.valueOf(monthlyCostOf(property))
-                .add(costItemTotalInJpy(plan, CostCategory.MONTHLY));
-
-        if (monthlyCosts.signum() == 0) {
-            return null;
-        }
-
-        BigDecimal remainingFunds = usableFunds.subtract(initialCosts).max(BigDecimal.ZERO);
-        return remainingFunds.divide(monthlyCosts, 1, RoundingMode.DOWN);
-    }
-
-    private BigDecimal costItemTotalInJpy(SettlementPlan plan, CostCategory category) {
-        BigDecimal total = BigDecimal.ZERO;
-        for (SettlementPlanCostItem item : plan.getCostItems()) {
-            if (item.getCostCategory() != category) {
-                continue;
-            }
-            BigDecimal amount = BigDecimal.valueOf(item.getAmount());
-            total = total.add(item.getCurrency() == CurrencyCode.KRW ? toJpy(amount) : amount);
-        }
-        return total;
-    }
-
-    private BigDecimal toJpy(long krw) {
-        return toJpy(BigDecimal.valueOf(krw));
-    }
-
-    private BigDecimal toJpy(BigDecimal krw) {
-        return krw.multiply(BigDecimal.valueOf(100))
-                .divide(ExchangeRateConstants.KRW_PER_100_JPY, 10, RoundingMode.HALF_UP);
-    }
-
-    private long monthlyCostOf(Property property) {
-        if (property.getConfirmedMonthlyCost() != null) {
-            return property.getConfirmedMonthlyCost();
-        }
-        return valueOrZero(property.getRent()) + valueOrZero(property.getManagementFee());
-    }
-
-    private long valueOrZero(Long value) {
-        return value == null ? 0L : value;
     }
 
 }

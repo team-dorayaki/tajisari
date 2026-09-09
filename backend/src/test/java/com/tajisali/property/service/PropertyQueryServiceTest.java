@@ -3,6 +3,7 @@ package com.tajisali.property.service;
 import com.tajisali.common.exception.BusinessException;
 import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.property.domain.Property;
+import com.tajisali.property.dto.PropertyDetailResponse;
 import com.tajisali.property.repository.PropertyRepository;
 import com.tajisali.settlement.domain.CostCategory;
 import com.tajisali.settlement.domain.CostType;
@@ -36,6 +37,7 @@ class PropertyQueryServiceTest {
     @Mock SettlementPlanRepository settlementPlanRepository;
     @Mock AnonymousUserService anonymousUserService;
     @Mock PropertyCostCalculationService propertyCostCalculationService;
+    @Mock PropertyFundSimulationService propertyFundSimulationService;
     private PropertyQueryService propertyQueryService;
 
     private static final String USER_KEY = "00000000-0000-0000-0000-000000000001";
@@ -45,7 +47,7 @@ class PropertyQueryServiceTest {
     void setUp() {
         propertyQueryService = new PropertyQueryService(
                 propertyRepository, settlementPlanRepository, anonymousUserService,
-                propertyCostCalculationService);
+                propertyCostCalculationService, propertyFundSimulationService);
     }
 
     @Test
@@ -61,13 +63,15 @@ class PropertyQueryServiceTest {
         SettlementPlan plan = new SettlementPlan(
                 LocalDate.now().plusMonths(1), 12,
                 8_000_000L, 100_000L, 1_000_000L, 0L,
-                MonthlyLivingCostInputMethod.DEFAULT);
+                MonthlyLivingCostInputMethod.DIRECT);
         plan.addCostItem(new SettlementPlanCostItem(
                 CostCategory.INITIAL, CostType.AIRFARE, 62_000L, CurrencyCode.JPY));
         plan.addCostItem(new SettlementPlanCostItem(
                 CostCategory.MONTHLY, CostType.FOOD, 115_000L, CurrencyCode.JPY));
         when(settlementPlanRepository.findByUserId(USER_ID))
                 .thenReturn(Optional.of(plan));
+        when(propertyFundSimulationService.calculate(245_000L, 70_000L, plan))
+                .thenReturn(simulationResult());
         var response = propertyQueryService.getProperties(USER_KEY);
 
         assertThat(response.totalCount()).isEqualTo(1);
@@ -106,7 +110,7 @@ class PropertyQueryServiceTest {
         SettlementPlan plan = new SettlementPlan(
                 LocalDate.now().plusMonths(1), 12,
                 8_000_000L, 100_000L, 1_000_000L, 0L,
-                MonthlyLivingCostInputMethod.DEFAULT);
+                MonthlyLivingCostInputMethod.DIRECT);
         ReflectionTestUtils.setField(plan, "id", 7L);
         plan.addCostItem(new SettlementPlanCostItem(
                 CostCategory.INITIAL, CostType.AIRFARE, 62_000L, CurrencyCode.JPY));
@@ -120,8 +124,10 @@ class PropertyQueryServiceTest {
                 .thenReturn(Optional.of(plan));
         when(propertyCostCalculationService.calculate(property)).thenReturn(
                 new PropertyCostCalculationResult(
-                        245_000L, 70_000L, 65_000L, 180_000L,
+                        999_000L, 999_000L, 65_000L, 180_000L,
                         false, false, false));
+        when(propertyFundSimulationService.calculate(245_000L, 70_000L, plan))
+                .thenReturn(simulationResult());
 
         var response = propertyQueryService.getPropertyDetail(10L, USER_KEY);
 
@@ -129,12 +135,18 @@ class PropertyQueryServiceTest {
         assertThat(response.settlementPlanId()).isEqualTo(7L);
         assertThat(response.costAnalysis().refundableAmount()).isEqualTo(65_000L);
         assertThat(response.costAnalysis().nonRefundableAmount()).isEqualTo(180_000L);
+        assertThat(response.costAnalysis().initialCost()).isEqualTo(245_000L);
+        assertThat(response.costAnalysis().monthlyCost()).isEqualTo(70_000L);
         assertThat(response.costAnalysis().hasUnknownInitialCosts()).isFalse();
         assertThat(response.costAnalysis().hasUnknownMonthlyCosts()).isFalse();
         assertThat(response.costAnalysis().hasUnclassifiedCosts()).isFalse();
         assertThat(response.simulation().exchangeRate().jpy()).isEqualTo(100);
         assertThat(response.simulation().exchangeRate().krw()).isEqualTo(860);
         assertThat(response.simulation().livingMonths()).isEqualByComparingTo("3.2");
+        assertThat(response.simulation().canMoveIn()).isTrue();
+        assertThat(response.simulation().monthlyBalances())
+                .extracting(PropertyDetailResponse.MonthlyBalance::month)
+                .containsExactly(1, 2, 3);
     }
 
     @Test
@@ -153,5 +165,27 @@ class PropertyQueryServiceTest {
         User user = new User(USER_KEY);
         ReflectionTestUtils.setField(user, "id", USER_ID);
         return user;
+    }
+
+    private PropertyFundSimulationResult simulationResult() {
+        return new PropertyFundSimulationResult(
+                913_953L,
+                307_000L,
+                true,
+                606_953L,
+                70_000L,
+                115_000L,
+                185_000L,
+                List.of(
+                        new PropertyFundSimulationResult.MonthlyBalance(1, 421_953L),
+                        new PropertyFundSimulationResult.MonthlyBalance(2, 236_953L),
+                        new PropertyFundSimulationResult.MonthlyBalance(3, 51_953L)),
+                new java.math.BigDecimal("3.2"),
+                false,
+                12,
+                2_527_000L,
+                0L,
+                1_613_047L,
+                13_872_204L);
     }
 }

@@ -85,9 +85,11 @@ class PropertyControllerTest {
                         false, false, false, List.of()),
                 new PropertyDetailResponse.Simulation(
                         new PropertyDetailResponse.ExchangeRate(100, 860),
-                        913_953L, 307_000L, 606_953L,
+                        913_953L, 307_000L, true, 606_953L,
                         70_000L, 115_000L, 185_000L,
-                        new BigDecimal("3.2"), 12, -1_613_047L, 1_613_047L));
+                        List.of(new PropertyDetailResponse.MonthlyBalance(1, 421_953L)),
+                        new BigDecimal("3.2"), false, 12,
+                        2_527_000L, 0L, 1_613_047L, 13_872_204L));
         when(propertyQueryService.getPropertyDetail(10L, USER_KEY)).thenReturn(response);
 
         mockMvc.perform(get("/api/properties/10")
@@ -102,6 +104,8 @@ class PropertyControllerTest {
                 .andExpect(jsonPath("$.data.costAnalysis.hasUnknownMonthlyCosts").value(false))
                 .andExpect(jsonPath("$.data.costAnalysis.hasUnclassifiedCosts").value(false))
                 .andExpect(jsonPath("$.data.simulation.exchangeRate.krw").value(860))
+                .andExpect(jsonPath("$.data.simulation.canMoveIn").value(true))
+                .andExpect(jsonPath("$.data.simulation.monthlyBalances[0].month").value(1))
                 .andExpect(jsonPath("$.data.simulation.livingMonths").value(3.2));
 
         verify(propertyQueryService).getPropertyDetail(10L, USER_KEY);
