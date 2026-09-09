@@ -7,7 +7,6 @@ import com.tajisali.property.domain.PropertyCostItem;
 import com.tajisali.property.dto.PropertyDetailResponse;
 import com.tajisali.property.dto.PropertyListResponse;
 import com.tajisali.property.repository.PropertyRepository;
-import com.tajisali.property.repository.PropertyAiAnalysisRepository;
 import com.tajisali.settlement.domain.CostCategory;
 import com.tajisali.settlement.domain.CurrencyCode;
 import com.tajisali.settlement.domain.SettlementPlan;
@@ -27,7 +26,6 @@ import java.math.RoundingMode;
 public class PropertyQueryService {
 
     private final PropertyRepository propertyRepository;
-    private final PropertyAiAnalysisRepository propertyAiAnalysisRepository;
     private final SettlementPlanRepository settlementPlanRepository;
 
     @Transactional(readOnly = true)
@@ -42,10 +40,9 @@ public class PropertyQueryService {
     }
 
     @Transactional(readOnly = true)
-    public PropertyDetailResponse getPropertyDetail(Long analysisId) {
-        var analysis = propertyAiAnalysisRepository.findDetailById(analysisId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PROPERTY_ANALYSIS_NOT_FOUND));
-        Property property = analysis.getProperty();
+    public PropertyDetailResponse getPropertyDetail(Long propertyId) {
+        Property property = propertyRepository.findById(propertyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROPERTY_NOT_FOUND));
         SettlementPlan plan = settlementPlanRepository
                 .findTopByOrderByCreatedAtDesc()
                 .orElse(null);
@@ -56,7 +53,6 @@ public class PropertyQueryService {
 
         return new PropertyDetailResponse(
                 property.getId(),
-                analysis.getId(),
                 plan == null ? null : plan.getId(),
                 new PropertyDetailResponse.PropertyInfo(
                         property.getPropertyName(),
@@ -141,17 +137,12 @@ public class PropertyQueryService {
 
     private PropertyListResponse.PropertySummary toSummary(
             Property property, SettlementPlan settlementPlan) {
-        Long analysisId = propertyAiAnalysisRepository
-                .findTopByPropertyIdOrderByIdDesc(property.getId())
-                .map(analysis -> analysis.getId())
-                .orElse(null);
         String thumbnailUrl = property.getImages().isEmpty()
                 ? null
                 : property.getImages().getFirst().getStorageKey();
 
         return new PropertyListResponse.PropertySummary(
                 property.getId(),
-                analysisId,
                 property.getPropertyName(),
                 property.getRent(),
                 initialCostOf(property),

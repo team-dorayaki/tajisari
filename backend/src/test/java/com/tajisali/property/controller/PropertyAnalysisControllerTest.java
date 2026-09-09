@@ -21,9 +21,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = PropertyAnalysisController.class)
+@WebMvcTest(controllers = PropertyController.class)
 @Import({JacksonConfig.class, GlobalExceptionHandler.class})
-class PropertyAnalysisControllerTest {
+class PropertyControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -34,17 +34,16 @@ class PropertyAnalysisControllerTest {
     @Test
     void 매물_목록과_화면용_요약정보를_반환한다() throws Exception {
         var summary = new PropertyListResponse.PropertySummary(
-                10L, 1L, "요코하마 스튜디오", 65_000L, 245_000L,
+                10L, "요코하마 스튜디오", 65_000L, 245_000L,
                 new java.math.BigDecimal("3.2"), 1, "properties/10/thumbnail.jpg");
         when(propertyQueryService.getProperties())
                 .thenReturn(new PropertyListResponse(1, List.of(summary)));
 
-        mockMvc.perform(get("/api/property-analyses"))
+        mockMvc.perform(get("/api/properties"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.totalCount").value(1))
                 .andExpect(jsonPath("$.data.properties[0].propertyId").value(10))
-                .andExpect(jsonPath("$.data.properties[0].analysisId").value(1))
                 .andExpect(jsonPath("$.data.properties[0].propertyName").value("요코하마 스튜디오"))
                 .andExpect(jsonPath("$.data.properties[0].rent").value(65_000))
                 .andExpect(jsonPath("$.data.properties[0].initialCost").value(245_000))
@@ -58,10 +57,9 @@ class PropertyAnalysisControllerTest {
     }
 
     @Test
-    void 분석_ID로_매물_상세를_반환한다() throws Exception {
+    void 매물_ID로_매물_상세를_반환한다() throws Exception {
         var response = new PropertyDetailResponse(
                 10L,
-                1L,
                 7L,
                 new PropertyDetailResponse.PropertyInfo(
                         "요코하마 스튜디오", "SUUMO", "https://suumo.jp/example",
@@ -77,19 +75,18 @@ class PropertyAnalysisControllerTest {
                         913_953L, 307_000L, 606_953L,
                         70_000L, 115_000L, 185_000L,
                         new BigDecimal("3.2"), 12, -1_613_047L, 1_613_047L));
-        when(propertyQueryService.getPropertyDetail(1L)).thenReturn(response);
+        when(propertyQueryService.getPropertyDetail(10L)).thenReturn(response);
 
-        mockMvc.perform(get("/api/property-analyses/1"))
+        mockMvc.perform(get("/api/properties/10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.propertyId").value(10))
-                .andExpect(jsonPath("$.data.analysisId").value(1))
                 .andExpect(jsonPath("$.data.imageUrls[0]")
                         .value("https://cdn.example.com/room-1.jpg"))
                 .andExpect(jsonPath("$.data.costAnalysis.refundableAmount").value(65_000))
                 .andExpect(jsonPath("$.data.simulation.exchangeRate.krw").value(860))
                 .andExpect(jsonPath("$.data.simulation.livingMonths").value(3.2));
 
-        verify(propertyQueryService).getPropertyDetail(1L);
+        verify(propertyQueryService).getPropertyDetail(10L);
     }
 }
