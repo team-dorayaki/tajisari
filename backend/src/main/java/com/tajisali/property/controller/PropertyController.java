@@ -56,8 +56,10 @@ public class PropertyController {
                     content = @Content(schema = @Schema(implementation = ApiResponse.class))
             )
     })
-    public ResponseEntity<Void> deleteProperty(@PathVariable Long propertyId) {
-        propertyCommandService.deleteProperty(propertyId);
+    public ResponseEntity<Void> deleteProperty(
+            @PathVariable Long propertyId,
+            @CookieValue(name = ANONYMOUS_USER_COOKIE, required = false) String userKey) {
+        propertyCommandService.deleteProperty(propertyId, userKey);
         return ResponseEntity.noContent().build();
     }
 }

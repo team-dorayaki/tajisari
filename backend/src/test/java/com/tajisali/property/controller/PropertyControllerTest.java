@@ -102,9 +102,10 @@ class PropertyControllerTest {
 
     @Test
     void 매물_ID로_저장된_매물을_삭제한다() throws Exception {
-        mockMvc.perform(delete("/api/properties/10"))
+        mockMvc.perform(delete("/api/properties/10")
+                        .cookie(new Cookie("tajisari_anonymous_user", USER_KEY)))
                 .andExpect(status().isNoContent());
 
-        verify(propertyCommandService).deleteProperty(10L);
+        verify(propertyCommandService).deleteProperty(10L, USER_KEY);
     }
 }
