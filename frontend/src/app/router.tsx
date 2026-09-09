@@ -1,7 +1,7 @@
 import { createBrowserRouter } from "react-router-dom"
 
-import { ComingSoonPage } from "@/app/coming-soon-page"
 import { MobileAppShell } from "@/components/layout/mobile-app-shell"
+import { ChecklistPage } from "@/features/home/pages/checklist-page"
 import { HomePage } from "@/features/home/pages/home-page"
 import { SplashPage } from "@/features/onboarding/pages/splash-page"
 import { StartPage } from "@/features/onboarding/pages/start-page"
@@ -39,7 +39,7 @@ const router = createBrowserRouter([
       { path: "properties/:propertyId", element: <PropertyDetailPage /> },
       { path: "properties/compare", element: <PropertyComparisonPage /> },
       { path: "my", element: <MySettlementPlanPage /> },
-      { path: "checklist", element: <ComingSoonPage /> },
+      { path: "checklist", element: <ChecklistPage /> },
     ],
   },
 ])

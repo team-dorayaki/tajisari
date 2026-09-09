@@ -26,7 +26,7 @@ function HomePage() {
       <div className="space-y-4 px-4 pt-5 pb-[calc(120px+env(safe-area-inset-bottom))]">
         {showProfile && <SettlementProfileCard />}
         {completed && <PriorityPropertiesCard />}
-        <SettlementChecklistCard completed={completed} />
+        <SettlementChecklistCard />
       </div>
 
       <BottomNav />
