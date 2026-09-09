@@ -18,9 +18,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
@@ -56,6 +59,9 @@ class PropertyCommandServiceTest {
     @Mock
     private PropertyCostCalculationService propertyCostCalculationService;
 
+    @Mock
+    private PropertyImageStorageService propertyImageStorageService;
+
     private PropertyCommandService propertyCommandService;
 
     @BeforeEach
@@ -66,7 +72,8 @@ class PropertyCommandServiceTest {
                 propertyImageRepository,
                 propertyCostItemRepository,
                 anonymousUserService,
-                propertyCostCalculationService
+                propertyCostCalculationService,
+                propertyImageStorageService
         );
     }
 
@@ -117,6 +124,89 @@ class PropertyCommandServiceTest {
         inOrder.verify(propertyRepository).save(any(Property.class));
         assertThat(result.response().propertyId()).isEqualTo(15L);
         assertThat(result.userKey()).isEqualTo(USER_KEY);
+    }
+
+    @Test
+    void 이미지_분석_확인_결과를_이미지와_비용_AI원본으로_함께_저장한다() {
+        User user = user(1L);
+        var rawResult = tools.jackson.databind.json.JsonMapper.builder().build().createObjectNode();
+        rawResult.putObject("property").put("key_money", 0);
+        PropertyConfirmRequest request = imageConfirmRequest(rawResult);
+        List<MultipartFile> files = List.of(
+                new MockMultipartFile("files", "first.jpg", "image/jpeg", new byte[]{1}),
+                new MockMultipartFile("files", "second.png", "image/png", new byte[]{2}),
+                new MockMultipartFile("files", "third.webp", "image/webp", new byte[]{3}));
+        List<PropertyImageStorageService.StoredImage> storedImages = List.of(
+                new PropertyImageStorageService.StoredImage(
+                        "properties/15/first.jpg", "first.jpg", 0, Path.of("/tmp/first.jpg")),
+                new PropertyImageStorageService.StoredImage(
+                        "properties/15/second.png", "second.png", 1, Path.of("/tmp/second.png")),
+                new PropertyImageStorageService.StoredImage(
+                        "properties/15/third.webp", "third.webp", 2, Path.of("/tmp/third.webp")));
+
+        when(anonymousUserService.resolveOrCreate(USER_KEY)).thenReturn(user);
+        when(propertyCostCalculationService.calculate(any(Property.class)))
+                .thenReturn(new PropertyCostCalculationResult(
+                        120_000L, 70_000L, null, null, false, false, false));
+        when(propertyRepository.save(any(Property.class))).thenAnswer(invocation -> {
+            Property property = invocation.getArgument(0);
+            org.springframework.test.util.ReflectionTestUtils.setField(property, "id", 15L);
+            return property;
+        });
+        when(propertyImageStorageService.save(15L, files)).thenReturn(storedImages);
+
+        PropertyConfirmResult result = propertyCommandService.confirmImages(request, files, USER_KEY);
+
+        verify(propertyImageRepository).saveAll(argThat(images -> {
+            assertThat(images)
+                    .extracting(image -> image.getStorageKey(), image -> image.getImageOrder(),
+                            image -> image.getOriginalFilename())
+                    .containsExactly(
+                            org.assertj.core.groups.Tuple.tuple(
+                                    "properties/15/first.jpg", 0, "first.jpg"),
+                            org.assertj.core.groups.Tuple.tuple(
+                                    "properties/15/second.png", 1, "second.png"),
+                            org.assertj.core.groups.Tuple.tuple(
+                                    "properties/15/third.webp", 2, "third.webp"));
+            return true;
+        }));
+        verify(propertyCostItemRepository).saveAll(any());
+        verify(propertyAiAnalysisRepository).save(argThat(analysis ->
+                analysis.getSourceType().equals("IMAGE")
+                        && analysis.getRawJson().equals(rawResult.toString())));
+        verify(propertyRepository).flush();
+        assertThat(result.response().propertyId()).isEqualTo(15L);
+    }
+
+    @Test
+    void 이미지_메타데이터_저장에_실패하면_저장한_파일을_정리한다() {
+        User user = user(1L);
+        var rawResult = tools.jackson.databind.json.JsonMapper.builder().build().createObjectNode();
+        PropertyConfirmRequest request = imageConfirmRequest(rawResult);
+        List<MultipartFile> files = List.of(
+                new MockMultipartFile("files", "first.jpg", "image/jpeg", new byte[]{1}));
+        List<PropertyImageStorageService.StoredImage> storedImages = List.of(
+                new PropertyImageStorageService.StoredImage(
+                        "properties/15/first.jpg", "first.jpg", 0, Path.of("/tmp/first.jpg")));
+
+        when(anonymousUserService.resolveOrCreate(USER_KEY)).thenReturn(user);
+        when(propertyCostCalculationService.calculate(any(Property.class)))
+                .thenReturn(new PropertyCostCalculationResult(null, null, null, null, false, false, false));
+        when(propertyRepository.save(any(Property.class))).thenAnswer(invocation -> {
+            Property property = invocation.getArgument(0);
+            org.springframework.test.util.ReflectionTestUtils.setField(property, "id", 15L);
+            return property;
+        });
+        when(propertyImageStorageService.save(15L, files)).thenReturn(storedImages);
+        org.mockito.Mockito.doThrow(new IllegalStateException("database failure"))
+                .when(propertyImageRepository).saveAll(any());
+
+        assertThatThrownBy(() -> propertyCommandService.confirmImages(request, files, USER_KEY))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(propertyImageStorageService).cleanUp(storedImages);
+        verify(propertyCostItemRepository, never()).saveAll(any());
+        verify(propertyAiAnalysisRepository, never()).save(any());
     }
 
     @Test
@@ -351,6 +441,30 @@ class PropertyCommandServiceTest {
                                 com.tajisali.property.domain.ObligationStatus.OPTIONAL,
                                 false,
                                 com.tajisali.property.domain.CostTiming.INITIAL)),
+                rawResult);
+    }
+
+    private PropertyConfirmRequest imageConfirmRequest(tools.jackson.databind.JsonNode rawResult) {
+        return new PropertyConfirmRequest(
+                PropertyAnalysisResponse.SourceType.IMAGE,
+                "gemini-3.5-flash-lite",
+                new PropertyConfirmRequest.PropertyInfo(
+                        PropertyAnalysisResponse.SourceSite.SUUMO,
+                        null,
+                        "요코하마 스튜디오",
+                        "가나가와현",
+                        "요코하마시",
+                        new BigDecimal("25.40"),
+                        "요코하마역",
+                        8,
+                        65_000L,
+                        5_000L,
+                        null,
+                        0L,
+                        null,
+                        24,
+                        999_999L),
+                List.of(),
                 rawResult);
     }
 }

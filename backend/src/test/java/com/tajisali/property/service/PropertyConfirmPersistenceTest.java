@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import({
         PropertyCommandService.class,
         PropertyCostCalculationService.class,
+        PropertyImageStorageService.class,
         AnonymousUserService.class
 })
 class PropertyConfirmPersistenceTest {
@@ -48,7 +49,7 @@ class PropertyConfirmPersistenceTest {
     private EntityManager entityManager;
 
     @Test
-    void URL_확인_결과의_매물_비용_AI원본을_한_사용자에게_저장한다() {
+    void URL_확인_결과의_매물_비용_AI원본을_한_사용자에게_저장한다() throws Exception {
         var rawResult = tools.jackson.databind.json.JsonMapper.builder().build().createObjectNode();
         rawResult.putObject("property").put("key_money", 0);
         PropertyConfirmResult result = propertyCommandService.confirmUrl(
@@ -96,8 +97,7 @@ class PropertyConfirmPersistenceTest {
         assertThat(property.getListedInitialCostTotal()).isEqualTo(999_999L);
         assertThat(analysis.getSourceType()).isEqualTo("URL");
         assertThat(analysis.getModelVersion()).isEqualTo("gemini-3.5-flash-lite");
-        var savedRawResult = tools.jackson.databind.json.JsonMapper.builder().build()
-                .readTree(analysis.getRawJson());
-        assertThat(savedRawResult).isEqualTo(rawResult);
+        assertThat(tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(analysis.getRawJson())).isEqualTo(rawResult);
     }
 }

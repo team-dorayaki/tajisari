@@ -23,6 +23,12 @@ spring:
 external:
   ai:
     base-url: ${AI_BASE_URL:http://localhost:8000}
+    connect-timeout: ${AI_CONNECT_TIMEOUT:2s}
+    read-timeout: ${AI_READ_TIMEOUT:60s}
   exchange:
     base-url: ${EXCHANGE_API_BASE_URL:}
     api-key: ${EXCHANGE_API_KEY:}
+
+property:
+  image:
+    storage-root: ${PROPERTY_IMAGE_STORAGE_ROOT:uploads}

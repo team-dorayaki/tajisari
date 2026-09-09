@@ -22,9 +22,23 @@ public record PropertyConfirmRequest(
         @NotNull JsonNode rawResult
 ) {
     @AssertTrue
-    public boolean hasHttpSourceUrl() {
-        if (property == null || property.sourceUrl() == null || property.sourceUrl().isBlank()) {
-            return true;
+    public boolean hasSupportedSourceType() {
+        return sourceType == PropertyAnalysisResponse.SourceType.URL
+                || sourceType == PropertyAnalysisResponse.SourceType.IMAGE;
+    }
+
+    @AssertTrue
+    public boolean hasValidSourceUrl() {
+        if (property == null) {
+            return false;
+        }
+        if (sourceType == PropertyAnalysisResponse.SourceType.IMAGE) {
+            return property.sourceUrl() == null;
+        }
+        if (sourceType != PropertyAnalysisResponse.SourceType.URL
+                || property.sourceUrl() == null
+                || property.sourceUrl().isBlank()) {
+            return false;
         }
         try {
             URI sourceUrl = URI.create(property.sourceUrl());
