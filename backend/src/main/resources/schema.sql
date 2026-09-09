@@ -1,6 +1,7 @@
 CREATE TABLE users (
     user_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '사용자 식별자',
     user_key VARCHAR(36) NOT NULL COMMENT '익명 사용자 키',
+    has_compared_properties BOOLEAN NOT NULL DEFAULT FALSE COMMENT '매물 비교 완료 이력 여부',
     created_at DATETIME(6) NOT NULL COMMENT '생성일시',
 
     CONSTRAINT pk_users PRIMARY KEY (user_id),

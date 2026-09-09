@@ -37,11 +37,23 @@ public class User {
     @Column(name = "user_key", nullable = false, length = 36, comment = "익명 사용자 키")
     private String userKey;
 
+    @Column(
+            name = "has_compared_properties",
+            nullable = false,
+            columnDefinition = "BOOLEAN",
+            comment = "매물 비교 완료 이력 여부"
+    )
+    private boolean hasComparedProperties;
+
     @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME(6)", comment = "생성일시")
     private LocalDateTime createdAt;
 
     public User(String userKey) {
         this.userKey = userKey;
+    }
+
+    public void markPropertiesCompared() {
+        hasComparedProperties = true;
     }
 
     @PrePersist
