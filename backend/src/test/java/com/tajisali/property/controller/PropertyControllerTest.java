@@ -76,18 +76,23 @@ class PropertyControllerTest {
                 new PropertyDetailResponse.PropertyInfo(
                         "요코하마 스튜디오", "SUUMO", "https://suumo.jp/example",
                         "가나가와현", "요코하마시", new BigDecimal("25.40"),
-                        "요코하마역", 8, null, 24, 1),
-                List.of("https://cdn.example.com/room-1.jpg"),
+                        "요코하마역", 8, null, 24, 1, 65_000L, 5_000L),
+                List.of(new PropertyDetailResponse.PropertyImage(
+                        1L, "https://cdn.example.com/room-1.jpg", 0)),
                 new PropertyDetailResponse.CostAnalysis(
-                        65_000L, 5_000L, 65_000L, 0L,
-                        245_000L, 70_000L,
-                        65_000L, 180_000L,
-                        false, false, false, List.of()),
+                        new PropertyDetailResponse.CostSummary(
+                                245_000L, 227_000L, 70_000L,
+                                227_000L, 18_000L,
+                                65_000L, 180_000L, 33_000L),
+                        new PropertyDetailResponse.CostGroups(
+                                List.of(), List.of(), List.of(), List.of()),
+                        List.of()),
                 new PropertyDetailResponse.Simulation(
                         new PropertyDetailResponse.ExchangeRate(100, 860),
                         913_953L, 307_000L, 606_953L,
                         70_000L, 115_000L, 185_000L,
-                        new BigDecimal("3.2"), 12, -1_613_047L, 1_613_047L));
+                        new BigDecimal("3.2"), 12,
+                        -1_613_047L, false, 1_613_047L, 13_872_205L));
         when(propertyQueryService.getPropertyDetail(10L, USER_KEY)).thenReturn(response);
 
         mockMvc.perform(get("/api/properties/10")
@@ -95,14 +100,13 @@ class PropertyControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.propertyId").value(10))
-                .andExpect(jsonPath("$.data.imageUrls[0]")
+                .andExpect(jsonPath("$.data.images[0].imageUrl")
                         .value("https://cdn.example.com/room-1.jpg"))
-                .andExpect(jsonPath("$.data.costAnalysis.refundableAmount").value(65_000))
-                .andExpect(jsonPath("$.data.costAnalysis.hasUnknownInitialCosts").value(false))
-                .andExpect(jsonPath("$.data.costAnalysis.hasUnknownMonthlyCosts").value(false))
-                .andExpect(jsonPath("$.data.costAnalysis.hasUnclassifiedCosts").value(false))
+                .andExpect(jsonPath("$.data.costAnalysis.summary.refundableAmount").value(65_000))
+                .andExpect(jsonPath("$.data.costAnalysis.summary.minimumInitialCost").value(227_000))
                 .andExpect(jsonPath("$.data.simulation.exchangeRate.krw").value(860))
-                .andExpect(jsonPath("$.data.simulation.livingMonths").value(3.2));
+                .andExpect(jsonPath("$.data.simulation.livingMonths").value(3.2))
+                .andExpect(jsonPath("$.data.simulation.canCoverPlannedStay").value(false));
 
         verify(propertyQueryService).getPropertyDetail(10L, USER_KEY);
     }

@@ -78,7 +78,7 @@ public class PropertyCommandService {
         if (propertyId == null) {
             return null;
         }
-        return propertyRepository.findByIdAndUserId(propertyId, userId)
+        return propertyRepository.findOwnedById(propertyId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROPERTY_NOT_FOUND));
     }
 
