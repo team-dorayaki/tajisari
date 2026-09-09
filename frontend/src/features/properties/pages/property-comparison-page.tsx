@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils"
 type ComparisonItem = PropertyComparison
 type LoadState = "loading" | "success" | "error"
 
-const columnColors = ["#315c58", "#00ad96", "#99a3ad"]
 const mutedColumnColors = ["#aeb7bc", "#c6cdd1", "#d9dfe2"]
 
 function formatYen(value: number) {
@@ -33,6 +32,50 @@ function ComparisonBars({ items, field, highlightField, formatter }: { items: Co
           <span className="w-full truncate text-center text-[11px] text-[var(--text-secondary)]">{String.fromCharCode(65 + index)}</span>
         </div>
       ))}
+    </div>
+  )
+}
+
+function ConditionComparison({ items }: { items: ComparisonItem[] }) {
+  const comparisonGridStyle = { gridTemplateColumns: `96px repeat(${items.length}, minmax(0, 1fr))` }
+  const knownWalkMinutes = items.map((item) => item.walkMinutes).filter((value): value is number => value !== null)
+  const knownAreas = items.map((item) => item.exclusiveAreaM2).filter((value): value is number => value !== null)
+  const minimumWalkMinutes = knownWalkMinutes.length > 0 ? Math.min(...knownWalkMinutes) : null
+  const maximumArea = knownAreas.length > 0 ? Math.max(...knownAreas) : null
+  const minimumUnknownCount = Math.min(...items.map((item) => item.unknownCostItemCount))
+  const hasUnknownCostInformation = items.some((item) => item.unknownCostItemCount > 0)
+  const balancedProperty = [...items].sort((left, right) =>
+    (left.walkMinutes ?? Number.POSITIVE_INFINITY) - (right.walkMinutes ?? Number.POSITIVE_INFINITY)
+    || (right.exclusiveAreaM2 ?? 0) - (left.exclusiveAreaM2 ?? 0),
+  )[0]
+  const balancedPropertyDetail = balancedProperty.walkMinutes === null || balancedProperty.exclusiveAreaM2 === null
+    ? "역 도보와 전용면적을 함께 비교했어요."
+    : `역 도보 ${balancedProperty.walkMinutes}분, 전용면적 ${balancedProperty.exclusiveAreaM2.toFixed(1)}㎡로 이동과 공간의 균형이 좋아요.`
+  const rows = [
+    { label: "지역", value: (item: ComparisonItem) => item.location ?? "미확인", highlighted: () => false },
+    { label: "가까운 역", value: (item: ComparisonItem) => item.nearestStation ?? "미확인", highlighted: () => false },
+    { label: "역 도보", value: (item: ComparisonItem) => item.walkMinutes === null ? "미확인" : `${item.walkMinutes}분`, highlighted: (item: ComparisonItem) => item.walkMinutes !== null && item.walkMinutes === minimumWalkMinutes },
+    { label: "전용면적", value: (item: ComparisonItem) => item.exclusiveAreaM2 === null ? "미확인" : `${item.exclusiveAreaM2.toFixed(1)}㎡`, highlighted: (item: ComparisonItem) => item.exclusiveAreaM2 !== null && item.exclusiveAreaM2 === maximumArea },
+    { label: "계약기간", value: (item: ComparisonItem) => item.contractPeriodMonths === null ? "미확인" : `${item.contractPeriodMonths / 12}년`, highlighted: () => false },
+    ...(hasUnknownCostInformation ? [{ label: "미확인 정보", value: (item: ComparisonItem) => `${item.unknownCostItemCount}개`, highlighted: (item: ComparisonItem) => item.unknownCostItemCount === minimumUnknownCount }] : []),
+  ]
+
+  return (
+    <div className="py-4">
+      <section className="bg-white px-4 py-5">
+        <BrandInsightCard title={<span className="text-[var(--brand)]">타지살이가 조건을 정리했어요</span>}>
+          <p className="text-sm font-bold leading-5 text-[#1e2226]"><strong className="text-[#ef5350]">{balancedProperty.name}</strong> 조건이 가장 균형적이에요 <span className="inline-flex rounded-full bg-[var(--brand)] px-2 py-0.5 align-middle text-[11px] font-bold leading-5 text-white">추천</span></p>
+          <p className="mt-1.5">{balancedPropertyDetail}</p>
+        </BrandInsightCard>
+        <h2 className="mt-7 text-base font-bold">조건 비교</h2>
+        <div className="mt-4">
+          <div className="grid text-center text-[11px] font-bold" style={comparisonGridStyle}>
+            <span />
+            {items.map((item, index) => <span key={item.propertyId} className="min-w-0 px-1 text-[var(--text-secondary)]"><span className="mb-2 block text-[10px] font-bold">{String.fromCharCode(65 + index)}</span><span className={cn("block py-1.5", item.propertyId === balancedProperty.propertyId && "rounded-t-lg bg-[#f2f7f7]")}>{item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className="mx-auto mb-1 size-12 rounded-xl object-cover" />}{item.name.replace(" 원룸", "").replace(" 스튜디오", "")}</span></span>)}
+          </div>
+          {rows.map((row, rowIndex) => <div key={row.label} className="grid text-center text-xs" style={comparisonGridStyle}><span className="px-2 py-3 text-left font-medium text-[var(--text-secondary)]">{row.label}</span>{items.map((item) => <span key={item.propertyId} className={cn("px-1 py-3 font-bold", row.highlighted(item) && "text-[var(--brand)]", item.propertyId === balancedProperty.propertyId && "bg-[#f2f7f7]", item.propertyId === balancedProperty.propertyId && rowIndex === rows.length - 1 && "rounded-b-lg")}>{row.value(item)}</span>)}</div>)}
+        </div>
+      </section>
     </div>
   )
 }
@@ -108,7 +151,7 @@ function PropertyComparisonPage() {
       <div className="border-b border-[#edf0f2] bg-white px-4">
         <div className="grid grid-cols-2 text-sm font-bold">
           <button type="button" onClick={() => setActiveTab("funds")} className={cn("min-h-12 border-b-2", activeTab === "funds" ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--text-secondary)]")}>자금 비교</button>
-          <button type="button" onClick={() => setActiveTab("notes")} className={cn("min-h-12 border-b-2", activeTab === "notes" ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--text-secondary)]")}>조건 · 주의사항</button>
+          <button type="button" onClick={() => setActiveTab("notes")} className={cn("min-h-12 border-b-2", activeTab === "notes" ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--text-secondary)]")}>조건 비교</button>
         </div>
       </div>
 
@@ -131,7 +174,7 @@ function PropertyComparisonPage() {
             <div className="mt-3">
               <div className="grid text-center text-[11px] font-bold" style={comparisonGridStyle}>
                 <span />
-                {items.map((item) => <span key={item.propertyId} className={cn("min-w-0 px-1 py-1.5 text-[var(--text-secondary)]", item.lowestInitialSettlementCost && "rounded-t-lg bg-[#f2f7f7]")}>{item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className="mx-auto mb-1 size-12 rounded-xl object-cover" />}{item.name.replace(" 원룸", "").replace(" 스튜디오", "")}</span>)}
+                {items.map((item, index) => <span key={item.propertyId} className="min-w-0 px-1 text-[var(--text-secondary)]"><span className="mb-2 block text-[10px] font-bold">{String.fromCharCode(65 + index)}</span><span className={cn("block py-1.5", item.lowestInitialSettlementCost && "rounded-t-lg bg-[#f2f7f7]")}>{item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className="mx-auto mb-1 size-12 rounded-xl object-cover" />}{item.name.replace(" 원룸", "").replace(" 스튜디오", "")}</span></span>)}
               </div>
               {([
                 ["월 주거비", (item: ComparisonItem) => formatYen(item.monthlyHousingCost), "lowestMonthlyHousingCost"],
@@ -146,7 +189,7 @@ function PropertyComparisonPage() {
         </div>
       )}
 
-      {displayState === "success" && activeTab === "notes" && <div className="space-y-3 py-4">{items.map((item, index) => <section key={item.propertyId} className="bg-white px-4 py-5"><h2 className="text-sm font-bold" style={{ color: columnColors[index] }}>{item.name}</h2><ul className="mt-3 space-y-2 text-sm leading-5 text-[var(--text-secondary)]">{item.notes.map((note) => <li key={note} className="flex gap-2"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-[#98a1aa]" />{note}</li>)}</ul></section>)}</div>}
+      {displayState === "success" && activeTab === "notes" && <ConditionComparison items={items} />}
 
       {displayState === "success" && <div className="fixed inset-x-0 bottom-[calc(100px+env(safe-area-inset-bottom))] z-20 mx-auto w-full max-w-[430px] px-4"><button type="button" onClick={openPrioritySheet} className="flex h-12 w-full items-center justify-center rounded-lg bg-[var(--brand)] text-sm font-bold text-white shadow-sm">매물 우선순위 정하기</button></div>}
       <BottomNav />

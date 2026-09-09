@@ -143,6 +143,12 @@ type PropertyComparison = {
   unlimited: boolean
   refundableDeposit: number
   nonRefundableCost: number
+  location: string | null
+  nearestStation: string | null
+  walkMinutes: number | null
+  exclusiveAreaM2: number | null
+  contractPeriodMonths: number | null
+  unknownCostItemCount: number
   notes: string[]
   lowestInitialSettlementCost: boolean
   lowestMonthlyHousingCost: boolean
@@ -154,8 +160,8 @@ type PropertyComparisonPayload = {
     propertyId: number
     propertyName: string | null
     thumbnailUrl: string | null
-    conditions: { prefecture: string | null; city: string | null; nearestStation: string | null; walkMinutes: number | null }
-    costs: { initialSettlementCost: number | null; refundableAmount: number | null; nonRefundableAmount: number | null }
+    conditions: { prefecture: string | null; city: string | null; nearestStation: string | null; walkMinutes: number | null; exclusiveAreaM2: number | null; contractPeriodMonths: number | null }
+    costs: { initialSettlementCost: number | null; refundableAmount: number | null; nonRefundableAmount: number | null; unknownCostItemCount: number }
     simulation: { balanceAfterMoveIn: number | null; monthlyHousingCost: number | null; livingMonths: number | null; unlimited: boolean } | null
     highlights: { lowestInitialSettlementCost: boolean; lowestMonthlyHousingCost: boolean; longestLivingMonths: boolean }
   }>
@@ -265,6 +271,12 @@ async function fetchPropertyComparisons(propertyIds: string[]): Promise<Property
     unlimited: property.simulation?.unlimited ?? false,
     refundableDeposit: property.costs.refundableAmount ?? 0,
     nonRefundableCost: property.costs.nonRefundableAmount ?? 0,
+    location: [property.conditions.prefecture, property.conditions.city].filter(Boolean).join(" ") || null,
+    nearestStation: property.conditions.nearestStation,
+    walkMinutes: property.conditions.walkMinutes,
+    exclusiveAreaM2: property.conditions.exclusiveAreaM2,
+    contractPeriodMonths: property.conditions.contractPeriodMonths,
+    unknownCostItemCount: property.costs.unknownCostItemCount,
     notes: [
       [property.conditions.prefecture, property.conditions.city].filter(Boolean).join(" "),
       property.conditions.nearestStation && property.conditions.walkMinutes !== null ? `${property.conditions.nearestStation} 도보 ${property.conditions.walkMinutes}분` : property.conditions.nearestStation,
