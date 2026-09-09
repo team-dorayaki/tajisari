@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "property_image")
@@ -33,4 +34,17 @@ public class PropertyImage {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    public PropertyImage(
+            Property property,
+            String storageKey,
+            int imageOrder,
+            String originalFilename,
+            LocalDateTime createdAt) {
+        this.property = Objects.requireNonNull(property, "property must not be null");
+        this.storageKey = Objects.requireNonNull(storageKey, "storageKey must not be null");
+        this.imageOrder = imageOrder;
+        this.originalFilename = originalFilename;
+        this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+    }
 }

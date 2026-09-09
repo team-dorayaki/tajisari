@@ -34,6 +34,7 @@ import static org.assertj.core.api.Assertions.tuple;
         PropertyCommandService.class,
         PropertyQueryService.class,
         PropertyCostCalculationService.class,
+        PropertyImageStorageService.class,
         PropertyFundSimulationService.class,
         ExchangeRateService.class,
         AnonymousUserService.class

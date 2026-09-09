@@ -22,13 +22,22 @@ public record PropertyConfirmRequest(
         @NotNull JsonNode rawResult
 ) {
     @AssertTrue
-    public boolean isUrlAnalysis() {
-        return sourceType == PropertyAnalysisResponse.SourceType.URL;
+    public boolean hasSupportedSourceType() {
+        return sourceType == PropertyAnalysisResponse.SourceType.URL
+                || sourceType == PropertyAnalysisResponse.SourceType.IMAGE;
     }
 
     @AssertTrue
-    public boolean hasHttpSourceUrl() {
-        if (property == null || property.sourceUrl() == null || property.sourceUrl().isBlank()) {
+    public boolean hasValidSourceUrl() {
+        if (property == null) {
+            return false;
+        }
+        if (sourceType == PropertyAnalysisResponse.SourceType.IMAGE) {
+            return property.sourceUrl() == null;
+        }
+        if (sourceType != PropertyAnalysisResponse.SourceType.URL
+                || property.sourceUrl() == null
+                || property.sourceUrl().isBlank()) {
             return false;
         }
         try {
@@ -48,7 +57,7 @@ public record PropertyConfirmRequest(
 
     public record PropertyInfo(
             @NotNull PropertyAnalysisResponse.SourceSite sourceSite,
-            @NotBlank String sourceUrl,
+            String sourceUrl,
             @NotBlank String propertyName,
             String prefecture,
             String city,

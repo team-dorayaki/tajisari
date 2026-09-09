@@ -18,6 +18,7 @@ public enum ErrorCode {
     SETTLEMENT_PLAN_COST_TOTAL_OVERFLOW(HttpStatus.BAD_REQUEST, "비용 합계가 지원하는 금액 범위를 초과했습니다."),
 
     PROPERTY_NOT_FOUND(HttpStatus.NOT_FOUND, "저장된 매물을 찾을 수 없습니다."),
+    PROPERTY_IMAGE_STORAGE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "매물 이미지 저장에 실패했습니다."),
     PROPERTY_COST_TOTAL_OVERFLOW(HttpStatus.BAD_REQUEST, "매물 비용 합계가 지원하는 금액 범위를 초과했습니다."),
     PROPERTY_FUND_SIMULATION_TOTAL_OVERFLOW(HttpStatus.BAD_REQUEST, "자금 시뮬레이션 합계가 지원하는 금액 범위를 초과했습니다."),
     PROPERTY_DUPLICATE_PRIORITY(HttpStatus.BAD_REQUEST, "같은 매물을 1순위와 2순위에 중복 지정할 수 없습니다."),

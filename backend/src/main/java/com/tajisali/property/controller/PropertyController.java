@@ -1,6 +1,9 @@
 package com.tajisali.property.controller;
 
+import com.tajisali.common.exception.BusinessException;
+import com.tajisali.common.exception.ErrorCode;
 import com.tajisali.common.response.ApiResponse;
+import com.tajisali.property.dto.PropertyAnalysisResponse;
 import com.tajisali.property.dto.PropertyConfirmRequest;
 import com.tajisali.property.dto.PropertyConfirmResponse;
 import com.tajisali.property.dto.PropertyDetailResponse;
@@ -18,6 +21,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,9 +33,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/properties")
@@ -40,6 +48,15 @@ public class PropertyController {
 
     private static final String ANONYMOUS_USER_COOKIE = "tajisari_anonymous_user";
     private static final Duration ANONYMOUS_USER_COOKIE_MAX_AGE = Duration.ofDays(365);
+    private static final int MAX_IMAGE_COUNT = 3;
+    private static final long MAX_IMAGE_SIZE_BYTES = 15L * 1024 * 1024;
+    private static final long MAX_IMAGE_REQUEST_SIZE_BYTES = 50L * 1024 * 1024;
+    private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of(
+            MediaType.IMAGE_JPEG_VALUE,
+            MediaType.IMAGE_PNG_VALUE,
+            "image/webp",
+            "image/bmp"
+    );
 
     private final PropertyQueryService propertyQueryService;
     private final PropertyCommandService propertyCommandService;
@@ -48,7 +65,25 @@ public class PropertyController {
     public ResponseEntity<ApiResponse<PropertyConfirmResponse>> confirmUrlProperty(
             @Valid @RequestBody PropertyConfirmRequest request,
             @CookieValue(name = ANONYMOUS_USER_COOKIE, required = false) String userKey) {
+        validateUrlRequest(request);
         PropertyConfirmResult result = propertyCommandService.confirmUrl(request, userKey);
+        return createdResponse(result, userKey);
+    }
+
+    @PostMapping(value = "/confirm/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<PropertyConfirmResponse>> confirmImageProperty(
+            @Valid @RequestPart("request") PropertyConfirmRequest request,
+            @RequestPart(value = "files", required = false) List<MultipartFile> files,
+            @CookieValue(name = ANONYMOUS_USER_COOKIE, required = false) String userKey) {
+        validateImageRequest(request);
+        validateImages(files);
+        PropertyConfirmResult result = propertyCommandService.confirmImages(request, files, userKey);
+        return createdResponse(result, userKey);
+    }
+
+    private ResponseEntity<ApiResponse<PropertyConfirmResponse>> createdResponse(
+            PropertyConfirmResult result,
+            String userKey) {
         ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.status(HttpStatus.CREATED);
 
         if (!Objects.equals(userKey, result.userKey())) {
@@ -62,6 +97,37 @@ public class PropertyController {
         }
 
         return responseBuilder.body(ApiResponse.success(result.response()));
+    }
+
+    private void validateImages(List<MultipartFile> files) {
+        if (files == null || files.isEmpty() || files.size() > MAX_IMAGE_COUNT) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
+        }
+        long totalSize = 0;
+        for (MultipartFile file : files) {
+            if (file == null
+                    || file.isEmpty()
+                    || file.getSize() > MAX_IMAGE_SIZE_BYTES
+                    || !ALLOWED_IMAGE_TYPES.contains(file.getContentType())) {
+                throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
+            }
+            totalSize += file.getSize();
+            if (totalSize > MAX_IMAGE_REQUEST_SIZE_BYTES) {
+                throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
+            }
+        }
+    }
+
+    private void validateUrlRequest(PropertyConfirmRequest request) {
+        if (request.sourceType() != PropertyAnalysisResponse.SourceType.URL) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
+        }
+    }
+
+    private void validateImageRequest(PropertyConfirmRequest request) {
+        if (request.sourceType() != PropertyAnalysisResponse.SourceType.IMAGE) {
+            throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
+        }
     }
 
     @GetMapping

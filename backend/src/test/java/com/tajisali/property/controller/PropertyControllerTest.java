@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.List;
 import java.math.BigDecimal;
@@ -31,6 +32,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -95,6 +97,87 @@ class PropertyControllerTest {
         mockMvc.perform(post("/api/properties/confirm")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(confirmRequest("https://suumo.jp/chintai/example", "IMAGE")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        verifyNoInteractions(propertyCommandService);
+    }
+
+    @Test
+    void 이미지_매물_확인_결과를_저장하고_기존_익명_사용자_쿠키를_재사용한다() throws Exception {
+        when(propertyCommandService.confirmImages(any(), any(), eq(USER_KEY)))
+                .thenReturn(new PropertyConfirmResult(
+                        new PropertyConfirmResponse(16L), USER_KEY));
+
+        mockMvc.perform(multipart("/api/properties/confirm/images")
+                        .file(imageRequestPart())
+                        .file(image("room-1.jpg", MediaType.IMAGE_JPEG_VALUE))
+                        .cookie(new Cookie("tajisari_anonymous_user", USER_KEY)))
+                .andExpect(status().isCreated())
+                .andExpect(header().doesNotExist("Set-Cookie"))
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.propertyId").value(16));
+
+        verify(propertyCommandService).confirmImages(
+                org.mockito.ArgumentMatchers.argThat(request ->
+                        request.sourceType().name().equals("IMAGE")
+                                && request.property().sourceUrl() == null
+                                && request.property().propertyName().equals("요코하마 스튜디오")),
+                any(),
+                eq(USER_KEY));
+    }
+
+    @Test
+    void 이미지_세장은_저장할_수_있고_새_익명_사용자_쿠키를_설정한다() throws Exception {
+        String createdUserKey = "00000000-0000-0000-0000-000000000002";
+        when(propertyCommandService.confirmImages(any(), any(), org.mockito.ArgumentMatchers.isNull()))
+                .thenReturn(new PropertyConfirmResult(
+                        new PropertyConfirmResponse(17L), createdUserKey));
+
+        mockMvc.perform(multipart("/api/properties/confirm/images")
+                        .file(imageRequestPart())
+                        .file(image("room-1.png", MediaType.IMAGE_PNG_VALUE))
+                        .file(image("room-2.webp", "image/webp"))
+                        .file(image("room-3.bmp", "image/bmp")))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString(
+                        "tajisari_anonymous_user=" + createdUserKey)));
+    }
+
+    @Test
+    void 이미지_저장_요청은_파일과_IMAGE_분석_결과만_허용한다() throws Exception {
+        mockMvc.perform(multipart("/api/properties/confirm/images")
+                        .file(imageRequestPart()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        mockMvc.perform(multipart("/api/properties/confirm/images")
+                        .file(imageRequestPart())
+                        .file(image("room-1.jpg", MediaType.IMAGE_JPEG_VALUE))
+                        .file(image("room-2.jpg", MediaType.IMAGE_JPEG_VALUE))
+                        .file(image("room-3.jpg", MediaType.IMAGE_JPEG_VALUE))
+                        .file(image("room-4.jpg", MediaType.IMAGE_JPEG_VALUE)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        mockMvc.perform(multipart("/api/properties/confirm/images")
+                        .file(imageRequestPart())
+                        .file(new MockMultipartFile(
+                                "files", "empty.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[0])))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        mockMvc.perform(multipart("/api/properties/confirm/images")
+                        .file(imageRequestPart())
+                        .file(image("note.txt", MediaType.TEXT_PLAIN_VALUE)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        mockMvc.perform(multipart("/api/properties/confirm/images")
+                        .file(new MockMultipartFile(
+                                "request", "", MediaType.APPLICATION_JSON_VALUE,
+                                imageConfirmRequest("URL").getBytes()))
+                        .file(image("room-1.jpg", MediaType.IMAGE_JPEG_VALUE)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
 
@@ -218,6 +301,35 @@ class PropertyControllerTest {
                   "property": {
                     "sourceSite": "SUUMO",
                     "sourceUrl": "%s",
+                    "propertyName": "요코하마 스튜디오"
+                  },
+                  "propertyCostItems": [],
+                  "rawResult": {"property": {"key_money": 0}}
+                }
+                """.formatted(sourceType, sourceUrl);
+    }
+
+    private MockMultipartFile imageRequestPart() {
+        return new MockMultipartFile(
+                "request", "", MediaType.APPLICATION_JSON_VALUE,
+                imageConfirmRequest("IMAGE").getBytes());
+    }
+
+    private MockMultipartFile image(String filename, String contentType) {
+        return new MockMultipartFile("files", filename, contentType, new byte[]{1, 2, 3});
+    }
+
+    private String imageConfirmRequest(String sourceType) {
+        String sourceUrl = "URL".equals(sourceType)
+                ? "\"sourceUrl\": \"https://suumo.jp/chintai/example\","
+                : "";
+        return """
+                {
+                  "sourceType": "%s",
+                  "modelVersion": "gemini-3.5-flash-lite",
+                  "property": {
+                    "sourceSite": "SUUMO",
+                    %s
                     "propertyName": "요코하마 스튜디오"
                   },
                   "propertyCostItems": [],
