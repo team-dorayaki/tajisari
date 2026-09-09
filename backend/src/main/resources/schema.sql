@@ -1,3 +1,13 @@
+CREATE TABLE users (
+    user_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '사용자 식별자',
+    user_key VARCHAR(36) NOT NULL COMMENT '익명 사용자 키',
+    created_at DATETIME(6) NOT NULL COMMENT '생성일시',
+
+    CONSTRAINT pk_users PRIMARY KEY (user_id),
+    CONSTRAINT uk_users_user_key UNIQUE (user_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
 CREATE TABLE property (
     property_id BIGINT NOT NULL AUTO_INCREMENT,
     source_site VARCHAR(50) NULL COMMENT '예: SUUMO, LEOPALACE21, UR임대',
@@ -106,6 +116,7 @@ CREATE TABLE property_image (
 
 CREATE TABLE settlement_plans (
     settlement_plan_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '정착 계획 식별자',
+    user_id BIGINT NOT NULL COMMENT '익명 사용자 ID',
     move_in_date DATE NOT NULL COMMENT '입주 예정일',
     planned_stay_months INT NOT NULL COMMENT '예상 체류기간(개월)',
     prepared_funds_krw BIGINT NOT NULL COMMENT '원화 준비자금',
@@ -117,6 +128,9 @@ CREATE TABLE settlement_plans (
     updated_at DATETIME(6) NOT NULL COMMENT '수정일시',
 
     CONSTRAINT pk_settlement_plans PRIMARY KEY (settlement_plan_id),
+    CONSTRAINT uk_settlement_plans_user UNIQUE (user_id),
+    CONSTRAINT fk_settlement_plans_user
+        FOREIGN KEY (user_id) REFERENCES users (user_id),
     CONSTRAINT chk_settlement_plans_stay_months
         CHECK (planned_stay_months BETWEEN 1 AND 24),
     CONSTRAINT chk_settlement_plans_prepared_funds

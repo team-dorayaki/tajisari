@@ -8,6 +8,10 @@ import java.util.Optional;
 
 public interface SettlementPlanRepository extends JpaRepository<SettlementPlan, Long> {
 
+    boolean existsByUserId(Long userId);
+
+    Optional<SettlementPlan> findByUserId(Long userId);
+
     @EntityGraph(attributePaths = "costItems")
     Optional<SettlementPlan> findTopByOrderByCreatedAtDesc();
 }

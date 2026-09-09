@@ -1,5 +1,6 @@
 package com.tajisali.settlement.domain;
 
+import com.tajisali.user.domain.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -16,6 +17,9 @@ import java.util.List;
 @Entity
 @Table(
         name = "settlement_plans",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_settlement_plans_user", columnNames = "user_id")
+        },
         check = {
                 @CheckConstraint(
                         name = "chk_settlement_plans_stay_months",
@@ -46,6 +50,14 @@ public class SettlementPlan {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "settlement_plan_id", comment = "정착 계획 식별자")
     private Long id;
+
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(
+            name = "user_id",
+            nullable = false,
+            foreignKey = @ForeignKey(name = "fk_settlement_plans_user")
+    )
+    private User user;
 
     @Column(name = "move_in_date", nullable = false, comment = "입주 예정일")
     private LocalDate moveInDate;
@@ -92,6 +104,27 @@ public class SettlementPlan {
             long emergencyReserveKrw,
             long emergencyReserveJpy,
             MonthlyLivingCostInputMethod monthlyLivingCostInputMethod) {
+        this(
+                null,
+                moveInDate,
+                plannedStayMonths,
+                preparedFundsKrw,
+                preparedFundsJpy,
+                emergencyReserveKrw,
+                emergencyReserveJpy,
+                monthlyLivingCostInputMethod);
+    }
+
+    public SettlementPlan(
+            User user,
+            LocalDate moveInDate,
+            int plannedStayMonths,
+            long preparedFundsKrw,
+            long preparedFundsJpy,
+            long emergencyReserveKrw,
+            long emergencyReserveJpy,
+            MonthlyLivingCostInputMethod monthlyLivingCostInputMethod) {
+        this.user = user;
         this.moveInDate = moveInDate;
         this.plannedStayMonths = plannedStayMonths;
         this.preparedFundsKrw = preparedFundsKrw;
