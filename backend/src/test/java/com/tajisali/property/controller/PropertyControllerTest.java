@@ -81,7 +81,8 @@ class PropertyControllerTest {
                 new PropertyDetailResponse.CostAnalysis(
                         65_000L, 5_000L, 65_000L, 0L,
                         245_000L, 70_000L,
-                        65_000L, 180_000L, List.of()),
+                        65_000L, 180_000L,
+                        false, false, false, List.of()),
                 new PropertyDetailResponse.Simulation(
                         new PropertyDetailResponse.ExchangeRate(100, 860),
                         913_953L, 307_000L, 606_953L,
@@ -97,6 +98,9 @@ class PropertyControllerTest {
                 .andExpect(jsonPath("$.data.imageUrls[0]")
                         .value("https://cdn.example.com/room-1.jpg"))
                 .andExpect(jsonPath("$.data.costAnalysis.refundableAmount").value(65_000))
+                .andExpect(jsonPath("$.data.costAnalysis.hasUnknownInitialCosts").value(false))
+                .andExpect(jsonPath("$.data.costAnalysis.hasUnknownMonthlyCosts").value(false))
+                .andExpect(jsonPath("$.data.costAnalysis.hasUnclassifiedCosts").value(false))
                 .andExpect(jsonPath("$.data.simulation.exchangeRate.krw").value(860))
                 .andExpect(jsonPath("$.data.simulation.livingMonths").value(3.2));
 
