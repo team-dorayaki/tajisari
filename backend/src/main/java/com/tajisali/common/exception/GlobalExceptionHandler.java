@@ -83,6 +83,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             HttpStatusCode status,
             WebRequest request
     ) {
+        log.warn("요청 본문을 변환하지 못했습니다.", exception);
         return handleExceptionInternal(
                 exception,
                 ApiResponse.failure(ErrorCode.COMMON_INVALID_REQUEST),
