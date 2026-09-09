@@ -2,110 +2,168 @@ package com.tajisali.property.controller;
 
 import com.tajisali.common.config.JacksonConfig;
 import com.tajisali.common.exception.GlobalExceptionHandler;
-import com.tajisali.property.dto.PropertyListResponse;
-import com.tajisali.property.dto.PropertyDetailResponse;
-import com.tajisali.property.service.PropertyCommandService;
-import com.tajisali.property.service.PropertyQueryService;
+import com.tajisali.property.dto.PropertyAnalysisResponse;
+import com.tajisali.property.service.PropertyAnalysisService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
-import java.math.BigDecimal;
-import jakarta.servlet.http.Cookie;
 
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = PropertyController.class)
+@WebMvcTest(controllers = PropertyAnalysisController.class)
 @Import({JacksonConfig.class, GlobalExceptionHandler.class})
-class PropertyControllerTest {
-
-    private static final String USER_KEY = "00000000-0000-0000-0000-000000000001";
+class PropertyAnalysisControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
-    private PropertyQueryService propertyQueryService;
-
-    @MockitoBean
-    private PropertyCommandService propertyCommandService;
+    private PropertyAnalysisService propertyAnalysisService;
 
     @Test
-    void 매물_목록과_화면용_요약정보를_반환한다() throws Exception {
-        var summary = new PropertyListResponse.PropertySummary(
-                10L, "요코하마 스튜디오", 65_000L, 245_000L,
-                new java.math.BigDecimal("3.2"), 1, "properties/10/thumbnail.jpg");
-        when(propertyQueryService.getProperties(USER_KEY))
-                .thenReturn(new PropertyListResponse(1, List.of(summary)));
+    void 이미지_요청은_파일을_Service에_전달하고_공통_응답을_반환한다() throws Exception {
+        MockMultipartFile image = image("property.png");
+        when(propertyAnalysisService.analyzeImages(anyList())).thenReturn(response("images"));
 
-        mockMvc.perform(get("/api/properties")
-                        .cookie(new Cookie("tajisari_anonymous_user", USER_KEY)))
+        mockMvc.perform(multipart("/api/property-analyses/images").file(image))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.totalCount").value(1))
-                .andExpect(jsonPath("$.data.properties[0].propertyId").value(10))
-                .andExpect(jsonPath("$.data.properties[0].propertyName").value("요코하마 스튜디오"))
-                .andExpect(jsonPath("$.data.properties[0].rent").value(65_000))
-                .andExpect(jsonPath("$.data.properties[0].initialCost").value(245_000))
-                .andExpect(jsonPath("$.data.properties[0].livingMonths").value(3.2))
-                .andExpect(jsonPath("$.data.properties[0].priorityRank").value(1))
-                .andExpect(jsonPath("$.data.properties[0].thumbnailUrl")
-                        .value("properties/10/thumbnail.jpg"))
+                .andExpect(jsonPath("$.data.inputType").value("images"))
+                .andExpect(jsonPath("$.data.analysisMetadata.schemaVersion").value("3.0"))
+                .andExpect(jsonPath("$.data.property.keyMoney").value(0))
+                .andExpect(jsonPath("$.data.property.deposit").value((Object) null))
+                .andExpect(jsonPath("$.data.rawResult.property.key_money").value(0))
                 .andExpect(jsonPath("$.error").value((Object) null));
 
-        verify(propertyQueryService).getProperties(USER_KEY);
+        verify(propertyAnalysisService).analyzeImages(anyList());
     }
 
     @Test
-    void 매물_ID로_매물_상세를_반환한다() throws Exception {
-        var response = new PropertyDetailResponse(
-                10L,
-                7L,
-                new PropertyDetailResponse.PropertyInfo(
-                        "요코하마 스튜디오", "SUUMO", "https://suumo.jp/example",
-                        "가나가와현", "요코하마시", new BigDecimal("25.40"),
-                        "요코하마역", 8, null, 24, 1),
-                List.of("https://cdn.example.com/room-1.jpg"),
-                new PropertyDetailResponse.CostAnalysis(
-                        65_000L, 5_000L, 65_000L, 0L,
-                        245_000L, 70_000L,
-                        65_000L, 180_000L,
-                        false, false, false, List.of()),
-                new PropertyDetailResponse.Simulation(
-                        new PropertyDetailResponse.ExchangeRate(100, 860),
-                        913_953L, 307_000L, 606_953L,
-                        70_000L, 115_000L, 185_000L,
-                        new BigDecimal("3.2"), 12, -1_613_047L, 1_613_047L));
-        when(propertyQueryService.getPropertyDetail(10L, USER_KEY)).thenReturn(response);
+    void 이미지_세_장은_정상_범위로_Service에_전달한다() throws Exception {
+        when(propertyAnalysisService.analyzeImages(anyList())).thenReturn(response("images"));
 
-        mockMvc.perform(get("/api/properties/10")
-                        .cookie(new Cookie("tajisari_anonymous_user", USER_KEY)))
+        mockMvc.perform(multipart("/api/property-analyses/images")
+                        .file(image("1.png"))
+                        .file(image("2.png"))
+                        .file(image("3.png")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(propertyAnalysisService).analyzeImages(argThat(files -> files.size() == 3));
+    }
+
+    @Test
+    void 이미지가_없으면_Service를_호출하지_않는다() throws Exception {
+        mockMvc.perform(multipart("/api/property-analyses/images"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        verifyNoInteractions(propertyAnalysisService);
+    }
+
+    @Test
+    void 빈_이미지나_네_장이면_Service를_호출하지_않는다() throws Exception {
+        mockMvc.perform(multipart("/api/property-analyses/images")
+                        .file(new MockMultipartFile("files", "empty.png", "image/png", new byte[0])))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        mockMvc.perform(multipart("/api/property-analyses/images")
+                        .file(image("1.png"))
+                        .file(image("2.png"))
+                        .file(image("3.png"))
+                        .file(image("4.png")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        verifyNoInteractions(propertyAnalysisService);
+    }
+
+    @Test
+    void 지원하지_않는_이미지_MIME이면_Service를_호출하지_않는다() throws Exception {
+        MockMultipartFile textFile = new MockMultipartFile(
+                "files", "property.txt", MediaType.TEXT_PLAIN_VALUE, new byte[]{1, 2, 3});
+
+        mockMvc.perform(multipart("/api/property-analyses/images").file(textFile))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+
+        verifyNoInteractions(propertyAnalysisService);
+    }
+
+    @Test
+    void URL_요청은_URL을_Service에_전달하고_공통_응답을_반환한다() throws Exception {
+        when(propertyAnalysisService.analyzeUrl("https://suumo.jp/chintai/example"))
+                .thenReturn(response("url"));
+
+        mockMvc.perform(post("/api/property-analyses/url")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"https://suumo.jp/chintai/example\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.propertyId").value(10))
-                .andExpect(jsonPath("$.data.imageUrls[0]")
-                        .value("https://cdn.example.com/room-1.jpg"))
-                .andExpect(jsonPath("$.data.costAnalysis.refundableAmount").value(65_000))
-                .andExpect(jsonPath("$.data.simulation.exchangeRate.krw").value(860))
-                .andExpect(jsonPath("$.data.simulation.livingMonths").value(3.2));
+                .andExpect(jsonPath("$.data.inputType").value("url"));
 
-        verify(propertyQueryService).getPropertyDetail(10L, USER_KEY);
+        verify(propertyAnalysisService).analyzeUrl("https://suumo.jp/chintai/example");
     }
 
     @Test
-    void 매물_ID로_저장된_매물을_삭제한다() throws Exception {
-        mockMvc.perform(delete("/api/properties/10"))
-                .andExpect(status().isNoContent());
+    void 비어_있거나_유효하지_않은_URL이면_Service를_호출하지_않는다() throws Exception {
+        for (String body : List.of(
+                "{}",
+                "{\"url\":null}",
+                "{\"url\":\" \"}",
+                "{\"url\":\"not-a-url\"}",
+                "{\"url\":\"ftp://example.com/property\"}"
+        )) {
+            mockMvc.perform(post("/api/property-analyses/url")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("COMMON_INVALID_INPUT"));
+        }
 
-        verify(propertyCommandService).deleteProperty(10L);
+        verifyNoInteractions(propertyAnalysisService);
+    }
+
+    private MockMultipartFile image(String filename) {
+        return new MockMultipartFile("files", filename, "image/png", new byte[]{1, 2, 3});
+    }
+
+    private PropertyAnalysisResponse response(String inputType) {
+        var rawResult = tools.jackson.databind.json.JsonMapper.builder().build().createObjectNode();
+        rawResult.putObject("property").put("key_money", 0);
+
+        return new PropertyAnalysisResponse(
+                inputType,
+                "gemini-3.5-flash-lite",
+                new PropertyAnalysisResponse.AnalysisMetadata(
+                        "3.0", PropertyAnalysisResponse.SourceType.IMAGE, 1),
+                new PropertyAnalysisResponse.Property(
+                        PropertyAnalysisResponse.SourceSite.SUUMO, null, "매물", "東京都", "北区",
+                        null, null, null, 65_000L, 5_000L, null, 0L, null, null, null),
+                List.of(),
+                new PropertyAnalysisResponse.AnalysisDetails(
+                        List.of(), List.of(), List.of(), List.of(), List.of(),
+                        new PropertyAnalysisResponse.Validation(
+                                List.of(), List.of(), List.of(),
+                                new PropertyAnalysisResponse.ValidationChecks(
+                                        true, true, true, true, true, true, true, true, true))),
+                rawResult
+        );
     }
 }
