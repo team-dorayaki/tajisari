@@ -134,53 +134,34 @@ type PropertyDetail = Omit<PropertyDetailPayload, "images"> & {
 
 type PropertyComparison = {
   propertyId: string
+  name: string
+  thumbnailUrl: string | null
   monthlyHousingCost: number
   initialSettlementCost: number
   balanceAfterMoveIn: number
   livingMonths: number
+  unlimited: boolean
   refundableDeposit: number
   nonRefundableCost: number
   notes: string[]
+  lowestInitialSettlementCost: boolean
+  lowestMonthlyHousingCost: boolean
+  longestLivingMonths: boolean
 }
 
-const mockPropertyComparisons: PropertyComparison[] = [
-  {
-    propertyId: "shinjuku-room-a",
-    monthlyHousingCost: 84_000,
-    initialSettlementCost: 348_000,
-    balanceAfterMoveIn: 5_040_000,
-    livingMonths: 4.2,
-    refundableDeposit: 78_000,
-    nonRefundableCost: 248_000,
-    notes: ["역에서 도보 6분", "관리비 포함 월 비용이 가장 높아요"],
-  },
-  {
-    propertyId: "yokohama-studio",
-    monthlyHousingCost: 71_000,
-    initialSettlementCost: 245_000,
-    balanceAfterMoveIn: 5_790_000,
-    livingMonths: 5.1,
-    refundableDeposit: 78_000,
-    nonRefundableCost: 167_000,
-    notes: ["초기 정산 비용이 가장 낮아요", "생활 가능 기간이 가장 길어요"],
-  },
-  {
-    propertyId: "osaka-room-b",
-    monthlyHousingCost: 65_000,
-    initialSettlementCost: 268_000,
-    balanceAfterMoveIn: 5_580_000,
-    livingMonths: 4.8,
-    refundableDeposit: 78_000,
-    nonRefundableCost: 190_000,
-    notes: ["월 비용이 가장 낮아요", "이동 거리와 생활권을 확인해보세요"],
-  },
-]
-
-type MockFailureStage = "list" | "delete" | "compare"
-
-function waitForMockResponse(delay = 300) {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, delay))
+type PropertyComparisonPayload = {
+  properties: Array<{
+    propertyId: number
+    propertyName: string | null
+    thumbnailUrl: string | null
+    conditions: { prefecture: string | null; city: string | null; nearestStation: string | null; walkMinutes: number | null }
+    costs: { initialSettlementCost: number | null; refundableAmount: number | null; nonRefundableAmount: number | null }
+    simulation: { balanceAfterMoveIn: number | null; monthlyHousingCost: number | null; livingMonths: number | null; unlimited: boolean } | null
+    highlights: { lowestInitialSettlementCost: boolean; lowestMonthlyHousingCost: boolean; longestLivingMonths: boolean }
+  }>
 }
+
+type MockFailureStage = "list" | "delete"
 
 function consumeMockFailure(stage: MockFailureStage) {
   if (!import.meta.env.DEV || typeof window === "undefined") return
@@ -259,13 +240,39 @@ async function deleteProperties(propertyIds: string[]): Promise<void> {
 }
 
 async function fetchPropertyComparisons(propertyIds: string[]): Promise<PropertyComparison[]> {
-  await waitForMockResponse()
-  consumeMockFailure("compare")
-  const comparisonById = new Map(mockPropertyComparisons.map((comparison) => [comparison.propertyId, comparison]))
-  return propertyIds.flatMap((propertyId) => {
-    const comparison = comparisonById.get(propertyId)
-    return comparison ? [structuredClone(comparison)] : []
+  const numericIds = propertyIds.map(Number)
+  if (numericIds.some((id) => !Number.isSafeInteger(id))) {
+    throw new Error("비교할 매물 정보를 확인할 수 없어요.")
+  }
+  const response = await fetch("/api/property-comparisons", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ propertyIds: numericIds }),
   })
+  const body = await response.json().catch(() => null) as ApiResponse<PropertyComparisonPayload> | null
+  if (!response.ok || !body?.success || body.data === null) {
+    throw new Error(body?.error?.message ?? `매물 비교에 실패했어요. (${response.status})`)
+  }
+  return body.data.properties.map((property) => ({
+    propertyId: String(property.propertyId),
+    name: property.propertyName?.trim() || "이름 없는 매물",
+    thumbnailUrl: property.thumbnailUrl,
+    monthlyHousingCost: property.simulation?.monthlyHousingCost ?? 0,
+    initialSettlementCost: property.costs.initialSettlementCost ?? 0,
+    balanceAfterMoveIn: property.simulation?.balanceAfterMoveIn ?? 0,
+    livingMonths: property.simulation?.livingMonths ?? 0,
+    unlimited: property.simulation?.unlimited ?? false,
+    refundableDeposit: property.costs.refundableAmount ?? 0,
+    nonRefundableCost: property.costs.nonRefundableAmount ?? 0,
+    notes: [
+      [property.conditions.prefecture, property.conditions.city].filter(Boolean).join(" "),
+      property.conditions.nearestStation && property.conditions.walkMinutes !== null ? `${property.conditions.nearestStation} 도보 ${property.conditions.walkMinutes}분` : property.conditions.nearestStation,
+    ].filter((note): note is string => Boolean(note)),
+    lowestInitialSettlementCost: property.highlights.lowestInitialSettlementCost,
+    lowestMonthlyHousingCost: property.highlights.lowestMonthlyHousingCost,
+    longestLivingMonths: property.highlights.longestLivingMonths,
+  }))
 }
 
 export { deleteProperties, fetchProperties, fetchProperty, fetchPropertyComparisons }
