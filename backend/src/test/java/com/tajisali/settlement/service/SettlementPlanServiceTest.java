@@ -7,6 +7,8 @@ import com.tajisali.settlement.dto.CurrencyAmountsRequest;
 import com.tajisali.settlement.dto.SettlementPlanCostItemRequest;
 import com.tajisali.settlement.dto.SettlementPlanCreateRequest;
 import com.tajisali.settlement.repository.SettlementPlanRepository;
+import com.tajisali.user.domain.User;
+import com.tajisali.user.service.AnonymousUserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,11 +36,18 @@ class SettlementPlanServiceTest {
     @Mock
     private SettlementPlanRepository settlementPlanRepository;
 
+    @Mock
+    private AnonymousUserService anonymousUserService;
+
     private SettlementPlanService settlementPlanService;
+    private User user;
 
     @BeforeEach
     void setUp() {
-        settlementPlanService = new SettlementPlanService(settlementPlanRepository);
+        user = new User("00000000-0000-0000-0000-000000000301");
+        ReflectionTestUtils.setField(user, "id", 1L);
+        lenient().when(anonymousUserService.resolveOrCreate(nullable(String.class))).thenReturn(user);
+        settlementPlanService = new SettlementPlanService(settlementPlanRepository, anonymousUserService);
     }
 
     @Test
@@ -54,7 +63,8 @@ class SettlementPlanServiceTest {
                         cost(CostType.OTHER, 20_000, CurrencyCode.JPY)));
         saveWithId(1L);
 
-        var response = settlementPlanService.create(request);
+        var result = settlementPlanService.create(request, null);
+        var response = result.response();
 
         assertThat(response.getPlanId()).isEqualTo(1L);
         assertThat(response.getAdditionalInitialCostTotals().getJpy()).isEqualTo(62_000L);
@@ -64,6 +74,7 @@ class SettlementPlanServiceTest {
         ArgumentCaptor<SettlementPlan> planCaptor = ArgumentCaptor.forClass(SettlementPlan.class);
         verify(settlementPlanRepository).save(planCaptor.capture());
         SettlementPlan savedPlan = planCaptor.getValue();
+        assertThat(savedPlan.getUser()).isSameAs(user);
         assertThat(savedPlan.getMoveInDate()).isEqualTo(request.getMoveInDate());
         assertThat(savedPlan.getPreparedFundsKrw()).isEqualTo(1_000_000L);
         assertThat(savedPlan.getPreparedFundsJpy()).isEqualTo(100_000L);
@@ -82,6 +93,9 @@ class SettlementPlanServiceTest {
                         SettlementPlanCostItem::getCurrency)
                 .containsExactly(CostCategory.MONTHLY, CostType.FOOD, 40_000L, CurrencyCode.JPY);
         assertThat(savedPlan.getCostItems().getFirst().getSettlementPlan()).isSameAs(savedPlan);
+        assertThat(result.userKey()).isEqualTo(user.getUserKey());
+        verify(anonymousUserService).resolveOrCreate(null);
+        verify(settlementPlanRepository).existsByUserId(user.getId());
     }
 
     @Test
@@ -93,7 +107,7 @@ class SettlementPlanServiceTest {
                         cost(CostType.TRANSPORTATION, 4_000, CurrencyCode.JPY)));
         saveWithId(1L);
 
-        var response = settlementPlanService.create(request);
+        var response = settlementPlanService.create(request, null).response();
 
         assertThat(response.getAdditionalInitialCostTotals().getKrw()).isEqualTo(1_000L);
         assertThat(response.getAdditionalInitialCostTotals().getJpy()).isEqualTo(2_000L);
@@ -107,7 +121,7 @@ class SettlementPlanServiceTest {
                 List.of(), List.of(cost(CostType.FOOD, 0, CurrencyCode.KRW)));
         saveWithId(1L);
 
-        var response = settlementPlanService.create(request);
+        var response = settlementPlanService.create(request, null).response();
 
         assertThat(response.getAdditionalInitialCostTotals().getKrw()).isZero();
         assertThat(response.getAdditionalInitialCostTotals().getJpy()).isZero();
@@ -142,7 +156,7 @@ class SettlementPlanServiceTest {
         SettlementPlanCreateRequest request = request(List.of(), List.of());
         saveWithId(1L);
 
-        var response = settlementPlanService.create(request);
+        var response = settlementPlanService.create(request, null).response();
 
         assertThat(response.getPlanId()).isEqualTo(1L);
         verify(settlementPlanRepository).save(any(SettlementPlan.class));
@@ -181,7 +195,7 @@ class SettlementPlanServiceTest {
                 List.of(cost(CostType.OTHER, 1, CurrencyCode.JPY)));
         saveWithId(1L);
 
-        var response = settlementPlanService.create(request);
+        var response = settlementPlanService.create(request, null).response();
 
         assertThat(response.getPlanId()).isEqualTo(1L);
         verify(settlementPlanRepository).save(any(SettlementPlan.class));
@@ -195,6 +209,32 @@ class SettlementPlanServiceTest {
                 List.of());
 
         assertErrorCode(request, ErrorCode.SETTLEMENT_PLAN_COST_TOTAL_OVERFLOW);
+    }
+
+    @Test
+    void 기존_사용자_키는_같은_사용자의_정착_계획에_연결한다() {
+        String userKey = user.getUserKey();
+        saveWithId(1L);
+
+        var result = settlementPlanService.create(request(List.of(), List.of()), userKey);
+
+        ArgumentCaptor<SettlementPlan> planCaptor = ArgumentCaptor.forClass(SettlementPlan.class);
+        verify(settlementPlanRepository).save(planCaptor.capture());
+        assertThat(planCaptor.getValue().getUser()).isSameAs(user);
+        assertThat(result.userKey()).isEqualTo(userKey);
+        verify(anonymousUserService).resolveOrCreate(userKey);
+    }
+
+    @Test
+    void 같은_사용자에게_계획이_있으면_중복_생성을_거부한다() {
+        when(settlementPlanRepository.existsByUserId(user.getId())).thenReturn(true);
+
+        assertThatThrownBy(() -> settlementPlanService.create(request(List.of(), List.of()), user.getUserKey()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_PLAN_ALREADY_EXISTS);
+
+        verify(settlementPlanRepository, never()).save(any());
     }
 
     @Test
@@ -323,6 +363,7 @@ class SettlementPlanServiceTest {
 
     private SettlementPlan storedPlan() {
         var plan = new SettlementPlan(
+                user,
                 LocalDate.now(KOREA_ZONE_ID).plusDays(30), 12,
                 1_000_000L, 100_000L, 100_000L, 10_000L, MonthlyLivingCostInputMethod.DEFAULT);
         plan.addCostItem(new SettlementPlanCostItem(CostCategory.INITIAL, CostType.AIRFARE, 1_000, CurrencyCode.KRW));
@@ -342,7 +383,7 @@ class SettlementPlanServiceTest {
     }
 
     private void assertErrorCode(SettlementPlanCreateRequest request, ErrorCode errorCode) {
-        assertThatThrownBy(() -> settlementPlanService.create(request))
+        assertThatThrownBy(() -> settlementPlanService.create(request, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(errorCode);
@@ -362,6 +403,7 @@ class SettlementPlanServiceTest {
         assertThat(plan.getUpdatedAt()).isEqualTo(previousUpdatedAt);
         verify(settlementPlanRepository, never()).flush();
         verify(settlementPlanRepository, never()).save(any());
+        verifyNoInteractions(anonymousUserService);
     }
 
     private SettlementPlanCreateRequest request(

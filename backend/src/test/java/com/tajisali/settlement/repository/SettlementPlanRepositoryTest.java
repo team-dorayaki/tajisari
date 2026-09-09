@@ -31,7 +31,8 @@ class SettlementPlanRepositoryTest {
 
     @Test
     void 준비자금과_월_생활비_입력_방식이_저장된다() {
-        SettlementPlan settlementPlan = createPlan(null);
+        User user = userRepository.save(new User("00000000-0000-0000-0000-000000000200"));
+        SettlementPlan settlementPlan = createPlan(user);
 
         SettlementPlan savedPlan = settlementPlanRepository.saveAndFlush(settlementPlan);
         entityManager.clear();
@@ -41,7 +42,7 @@ class SettlementPlanRepositoryTest {
         assertThat(foundPlan.getPreparedFundsKrw()).isEqualTo(8_000_000L);
         assertThat(foundPlan.getPreparedFundsJpy()).isEqualTo(100_000L);
         assertThat(foundPlan.getMonthlyLivingCostInputMethod()).isEqualTo(MonthlyLivingCostInputMethod.DEFAULT);
-        assertThat(foundPlan.getUser()).isNull();
+        assertThat(foundPlan.getUser().getId()).isEqualTo(user.getId());
     }
 
     @Test

@@ -44,4 +44,16 @@ class UserRepositoryTest {
         assertThatThrownBy(() -> userRepository.saveAndFlush(new User(userKey)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
+
+    @Test
+    void 사용자_키로_기존_사용자를_조회할_수_있다() {
+        String userKey = UUID.randomUUID().toString();
+        Long userId = userRepository.saveAndFlush(new User(userKey)).getId();
+        entityManager.clear();
+
+        User foundUser = userRepository.findByUserKey(userKey).orElseThrow();
+
+        assertThat(foundUser.getId()).isEqualTo(userId);
+        assertThat(foundUser.getUserKey()).isEqualTo(userKey);
+    }
 }

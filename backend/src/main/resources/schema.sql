@@ -116,7 +116,7 @@ CREATE TABLE property_image (
 
 CREATE TABLE settlement_plans (
     settlement_plan_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '정착 계획 식별자',
-    user_id BIGINT NULL COMMENT '익명 사용자 ID',
+    user_id BIGINT NOT NULL COMMENT '익명 사용자 ID',
     move_in_date DATE NOT NULL COMMENT '입주 예정일',
     planned_stay_months INT NOT NULL COMMENT '예상 체류기간(개월)',
     prepared_funds_krw BIGINT NOT NULL COMMENT '원화 준비자금',

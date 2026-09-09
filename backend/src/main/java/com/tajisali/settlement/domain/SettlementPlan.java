@@ -51,10 +51,10 @@ public class SettlementPlan {
     @Column(name = "settlement_plan_id", comment = "정착 계획 식별자")
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(
             name = "user_id",
-            nullable = true,
+            nullable = false,
             foreignKey = @ForeignKey(name = "fk_settlement_plans_user")
     )
     private User user;
