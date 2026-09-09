@@ -91,7 +91,45 @@ class PropertyFinalSaveSimulationIntegrationTest {
         assertThat(simulation.shortageKrw()).isEqualTo(387_000L);
     }
 
+    @Test
+    void DEFAULT_정착_계획이면_확정_비용이_있어도_시뮬레이션을_반환하지_않는다() {
+        PropertyConfirmResult confirmResult = propertyCommandService.confirmUrl(
+                confirmRequest(), null);
+        saveSettlementPlan(confirmResult.userKey(), MonthlyLivingCostInputMethod.DEFAULT);
+        entityManager.flush();
+        entityManager.clear();
+
+        var detail = propertyQueryService.getPropertyDetail(
+                confirmResult.response().propertyId(), confirmResult.userKey());
+
+        assertThat(detail.costAnalysis().summary().initialCost()).isEqualTo(120_000L);
+        assertThat(detail.costAnalysis().summary().monthlyCost()).isEqualTo(85_000L);
+        assertThat(detail.simulation()).isNull();
+    }
+
+    @Test
+    void 금액_미확인_비용은_확정_비용에서_제외하고_상세_조회에_미확인으로_표시한다() {
+        PropertyConfirmResult confirmResult = propertyCommandService.confirmUrl(
+                confirmRequestWithUnknownInitialCost(), null);
+        saveDirectSettlementPlan(confirmResult.userKey());
+        entityManager.flush();
+        entityManager.clear();
+
+        var detail = propertyQueryService.getPropertyDetail(
+                confirmResult.response().propertyId(), confirmResult.userKey());
+
+        assertThat(detail.costAnalysis().summary().initialCost()).isEqualTo(120_000L);
+        assertThat(detail.costAnalysis().excludedCosts())
+                .extracting(excludedCost -> excludedCost.label(), excludedCost -> excludedCost.reason())
+                .containsExactly(tuple("화재 보험료", "금액 미확인"));
+        assertThat(detail.simulation().initialCost()).isEqualTo(130_000L);
+    }
+
     private void saveDirectSettlementPlan(String userKey) {
+        saveSettlementPlan(userKey, MonthlyLivingCostInputMethod.DIRECT);
+    }
+
+    private void saveSettlementPlan(String userKey, MonthlyLivingCostInputMethod inputMethod) {
         var user = userRepository.findByUserKey(userKey).orElseThrow();
         SettlementPlan plan = new SettlementPlan(
                 user,
@@ -101,7 +139,7 @@ class PropertyFinalSaveSimulationIntegrationTest {
                 500_000L,
                 0L,
                 100_000L,
-                MonthlyLivingCostInputMethod.DIRECT);
+                inputMethod);
         plan.addCostItem(new SettlementPlanCostItem(
                 CostCategory.INITIAL, CostType.VISA_ADMINISTRATION, 10_000L, CurrencyCode.JPY));
         plan.addCostItem(new SettlementPlanCostItem(
@@ -134,5 +172,21 @@ class PropertyFinalSaveSimulationIntegrationTest {
                                 "월 지원비", "월 지원비", 10_000L, null,
                                 ObligationStatus.REQUIRED, true, CostTiming.MONTHLY)),
                 rawResult);
+    }
+
+    private PropertyConfirmRequest confirmRequestWithUnknownInitialCost() {
+        PropertyConfirmRequest request = confirmRequest();
+        List<PropertyConfirmRequest.PropertyCostItem> costItems = new java.util.ArrayList<>(
+                request.propertyCostItems());
+        costItems.add(new PropertyConfirmRequest.PropertyCostItem(
+                "화재 보험료", "화재 보험료", null, "금액 확인 필요",
+                ObligationStatus.REQUIRED, true, CostTiming.INITIAL));
+
+        return new PropertyConfirmRequest(
+                request.sourceType(),
+                request.modelVersion(),
+                request.property(),
+                List.copyOf(costItems),
+                request.rawResult());
     }
 }
