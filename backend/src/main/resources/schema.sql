@@ -116,6 +116,7 @@ CREATE TABLE property_image (
 
 CREATE TABLE settlement_plans (
     settlement_plan_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '정착 계획 식별자',
+    user_id BIGINT NULL COMMENT '익명 사용자 ID',
     move_in_date DATE NOT NULL COMMENT '입주 예정일',
     planned_stay_months INT NOT NULL COMMENT '예상 체류기간(개월)',
     prepared_funds_krw BIGINT NOT NULL COMMENT '원화 준비자금',
@@ -127,6 +128,9 @@ CREATE TABLE settlement_plans (
     updated_at DATETIME(6) NOT NULL COMMENT '수정일시',
 
     CONSTRAINT pk_settlement_plans PRIMARY KEY (settlement_plan_id),
+    CONSTRAINT uk_settlement_plans_user UNIQUE (user_id),
+    CONSTRAINT fk_settlement_plans_user
+        FOREIGN KEY (user_id) REFERENCES users (user_id),
     CONSTRAINT chk_settlement_plans_stay_months
         CHECK (planned_stay_months BETWEEN 1 AND 24),
     CONSTRAINT chk_settlement_plans_prepared_funds
