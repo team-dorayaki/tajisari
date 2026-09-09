@@ -16,15 +16,14 @@ export type SettlementPlan = {
 }
 type ApiResponse<T> = { success: boolean; data: T | null; error?: { message?: string } | null }
 type BackendPlan = SettlementPlanRequest & { planId: number; additionalInitialCostTotals: CurrencyAmounts; monthlyLivingCostTotals: CurrencyAmounts }
-const planIdKey = "tajisari.settlementPlanId"
 const api = "/api/settlement-plans"
+const currentUserApi = "/api/me/settlement-plan"
 const todayInKorea = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())
 const costTypeMap: Record<AdditionalCostKey | MonthlyCostKey, string> = {
   flight: "AIRFARE", moving: "MOVING", furniture: "FURNITURE_APPLIANCE", visa: "VISA_ADMINISTRATION",
   food: "FOOD", transportation: "TRANSPORTATION", utilities: "UTILITIES", communication: "COMMUNICATION",
   insurance: "INSURANCE_TAX", other: "OTHER",
 }
-function getStoredPlanId() { return typeof window === "undefined" ? null : window.localStorage.getItem(planIdKey) }
 function toUiPlan(plan: BackendPlan): SettlementPlan {
   const exchangeRate = JPY_TO_KRW_EXCHANGE_RATE
   const exchangeRateUpdatedAt = todayInKorea()
@@ -48,14 +47,12 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return body.data
 }
 async function createSettlementPlan(payload: SettlementPlanRequest) {
-  const result = await request<{ planId: number }>(api, { method: "POST", body: JSON.stringify(payload) })
-  window.localStorage.setItem(planIdKey, String(result.planId)); return result
+  return request<{ planId: number }>(api, { method: "POST", body: JSON.stringify(payload) })
 }
-async function fetchSettlementPlan(planId = getStoredPlanId()) {
-  if (!planId) throw new Error("저장된 정착 계획이 없습니다.")
-  return toUiPlan(await request<BackendPlan>(`${api}/${planId}`))
+async function fetchSettlementPlan() {
+  return toUiPlan(await request<BackendPlan>(currentUserApi))
 }
-async function updateSettlementPlan(planId: string, payload: SettlementPlanRequest) {
-  return toUiPlan(await request<BackendPlan>(`${api}/${planId}`, { method: "PUT", body: JSON.stringify(payload) }))
+async function updateSettlementPlan(payload: SettlementPlanRequest) {
+  return toUiPlan(await request<BackendPlan>(currentUserApi, { method: "PUT", body: JSON.stringify(payload) }))
 }
 export { createSettlementPlan, fetchSettlementPlan, updateSettlementPlan, costTypeMap }
