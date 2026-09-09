@@ -78,7 +78,8 @@ class PropertyControllerTest {
                 new PropertyDetailResponse.CostAnalysis(
                         65_000L, 5_000L, 65_000L, 0L,
                         245_000L, 70_000L,
-                        65_000L, 180_000L, List.of()),
+                        65_000L, 180_000L,
+                        false, false, false, List.of()),
                 new PropertyDetailResponse.Simulation(
                         new PropertyDetailResponse.ExchangeRate(100, 860),
                         913_953L, 307_000L, 606_953L,

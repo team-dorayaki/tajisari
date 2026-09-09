@@ -36,8 +36,11 @@ public record PropertyDetailResponse(
             Long keyMoney,
             Long initialCost,
             Long monthlyCost,
-            long refundableAmount,
-            long nonRefundableAmount,
+            Long refundableAmount,
+            Long nonRefundableAmount,
+            boolean hasUnknownInitialCosts,
+            boolean hasUnknownMonthlyCosts,
+            boolean hasUnclassifiedCosts,
             List<CostItem> costItems) {
     }
 

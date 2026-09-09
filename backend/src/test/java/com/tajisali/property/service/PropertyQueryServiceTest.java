@@ -35,6 +35,7 @@ class PropertyQueryServiceTest {
     @Mock PropertyRepository propertyRepository;
     @Mock SettlementPlanRepository settlementPlanRepository;
     @Mock AnonymousUserService anonymousUserService;
+    @Mock PropertyCostCalculationService propertyCostCalculationService;
     private PropertyQueryService propertyQueryService;
 
     private static final String USER_KEY = "00000000-0000-0000-0000-000000000001";
@@ -43,7 +44,8 @@ class PropertyQueryServiceTest {
     @BeforeEach
     void setUp() {
         propertyQueryService = new PropertyQueryService(
-                propertyRepository, settlementPlanRepository, anonymousUserService);
+                propertyRepository, settlementPlanRepository, anonymousUserService,
+                propertyCostCalculationService);
     }
 
     @Test
@@ -116,6 +118,10 @@ class PropertyQueryServiceTest {
         when(propertyRepository.findByIdAndUserId(10L, USER_ID)).thenReturn(Optional.of(property));
         when(settlementPlanRepository.findByUserId(USER_ID))
                 .thenReturn(Optional.of(plan));
+        when(propertyCostCalculationService.calculate(property)).thenReturn(
+                new PropertyCostCalculationResult(
+                        245_000L, 70_000L, 65_000L, 180_000L,
+                        false, false, false));
 
         var response = propertyQueryService.getPropertyDetail(10L, USER_KEY);
 
@@ -123,6 +129,9 @@ class PropertyQueryServiceTest {
         assertThat(response.settlementPlanId()).isEqualTo(7L);
         assertThat(response.costAnalysis().refundableAmount()).isEqualTo(65_000L);
         assertThat(response.costAnalysis().nonRefundableAmount()).isEqualTo(180_000L);
+        assertThat(response.costAnalysis().hasUnknownInitialCosts()).isFalse();
+        assertThat(response.costAnalysis().hasUnknownMonthlyCosts()).isFalse();
+        assertThat(response.costAnalysis().hasUnclassifiedCosts()).isFalse();
         assertThat(response.simulation().exchangeRate().jpy()).isEqualTo(100);
         assertThat(response.simulation().exchangeRate().krw()).isEqualTo(860);
         assertThat(response.simulation().livingMonths()).isEqualByComparingTo("3.2");
